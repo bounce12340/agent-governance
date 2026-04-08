@@ -1,6 +1,10 @@
 # AI Governance Framework for Multi-Agent Systems
 # 多 Agent AI 治理框架
 
+[![CI](https://github.com/bounce12340/agent-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bounce12340/agent-governance/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/bounce12340/agent-governance)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-bilingual-brightgreen)](README.md)
+
 A bilingual governance framework for AI agents based on **separation of powers** and **harness engineering**.
 
 一套結合 **三權分立** 與 **Harness Engineering** 的雙語 AI Agent 治理框架。
@@ -254,6 +258,9 @@ These examples are written like technical specs, not marketing copy.
 - [Data flow and state machine / 資料流與狀態機](docs/state-machine.md)
 - [CLI and API reference / CLI 與 API 參考](docs/cli-api-reference.md)
 - [Docs index / 文件索引](docs/README_INDEX.md)
+- [Security policy / 安全性政策](SECURITY.md)
+- [Code of conduct / 行為準則](CODE_OF_CONDUCT.md)
+- [Changelog](CHANGELOG.md)
 
 ---
 
