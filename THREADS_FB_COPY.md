@@ -1,9 +1,11 @@
 # Social copy
-# 社群貼文文案
 
-## Threads / Threads
+社群貼文文案
 
-### 繁中版
+## Threads copy
+
+### Threads copy, 繁中版
+
 我把 AI Agent 協作改成「三權分立 + Harness Engineering」了。
 
 立法權先定義成功標準，行政權負責實作，司法權負責審查。
@@ -13,7 +15,8 @@
 
 GitHub: [paste your link]
 
-### English version
+### Threads copy, English version
+
 I turned AI agent collaboration into a system of separation of powers + harness engineering.
 
 Legislative defines success, Executive builds it, Judiciary verifies it.
@@ -23,12 +26,14 @@ If you're tired of vague requirements, hallucinated output, and fake completion,
 
 GitHub: [paste your link]
 
-## Facebook / Facebook
+## Facebook copy
 
-### 繁中版
+### Facebook copy, 繁中版
+
 我做了一個 AI Agent 治理框架，核心概念是「三權分立 + Harness Engineering」。
 
 它的做法很直接：
+
 - 立法權先定義驗收標準
 - 行政權負責實作
 - 司法權負責審查
@@ -39,16 +44,19 @@ GitHub: [paste your link]
 
 GitHub: [paste your link]
 
-### English version
+### Facebook copy, English version
+
 I built an AI agent governance framework based on separation of powers + harness engineering.
 
 The flow is simple:
+
 - Legislative defines acceptance criteria
 - Executive builds the deliverable
 - Judiciary checks compliance
 - Harness turns verification into repeatable tests
 
-This is not just another agent chat setup. It is a structured system you can use for projects, apps, and requirement validation.
+This is not just another agent chat setup.
+It is a structured system you can use for projects, apps, and requirement validation.
 If you want to see how AI can move from chaos to governance, grab it on GitHub.
 
 GitHub: [paste your link]
