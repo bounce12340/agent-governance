@@ -7,6 +7,7 @@ Thanks for helping improve this repo.
 ## English
 
 ### What to contribute
+
 - Improve bilingual docs
 - Add more technical examples
 - Add tests or harness cases
@@ -14,12 +15,14 @@ Thanks for helping improve this repo.
 - Fix unclear wording
 
 ### Before you submit
+
 - Keep the separation-of-powers model intact
 - Keep acceptance criteria testable
 - Keep examples short and concrete
 - Avoid vague or marketing-only text
 
 ### Suggested workflow
+
 1. Fork the repo
 2. Create a feature branch
 3. Make focused changes
@@ -29,6 +32,7 @@ Thanks for helping improve this repo.
 ## 繁體中文
 
 ### 可以貢獻什麼
+
 - 改善雙語文件
 - 增加技術範例
 - 增加測試或 harness 案例
@@ -36,12 +40,14 @@ Thanks for helping improve this repo.
 - 修正文句不清楚的地方
 
 ### 提交前請確認
+
 - 保留三權分立模型
 - 驗收標準要能被測試
 - 範例要短、要具體
 - 避免空泛或純行銷式文字
 
 ### 建議流程
+
 1. Fork repository
 2. 建立 feature branch
 3. 做聚焦修改

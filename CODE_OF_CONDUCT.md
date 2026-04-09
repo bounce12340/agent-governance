@@ -8,14 +8,16 @@ We want this project to be welcoming, respectful, and useful.
 
 ## Standards / 標準
 
-### English
+### English / Standards
+
 - Be respectful
 - Stay constructive
 - Give credit when due
 - Keep feedback focused on the work
 - Avoid harassment, hate, or personal attacks
 
-### 繁體中文
+### 繁體中文 / 標準
+
 - 保持尊重
 - 保持建設性
 - 該給 credit 的就給
@@ -24,8 +26,10 @@ We want this project to be welcoming, respectful, and useful.
 
 ## Enforcement / 執行
 
-### English
+### English / Enforcement
+
 Project maintainers may remove or reject contributions that violate this code of conduct.
 
-### 繁體中文
+### 繁體中文 / 執行
+
 維護者可以移除或拒絕違反本準則的內容。

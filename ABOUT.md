@@ -1,5 +1,4 @@
-# About
-# 關於這個專案
+# About / 關於這個專案
 
 ## English
 
@@ -7,6 +6,7 @@ This project explores a simple idea:
 if AI agents are going to make decisions, they should also be governed.
 
 The framework borrows from **separation of powers**:
+
 - **Legislative** defines what success means.
 - **Executive** builds the thing.
 - **Judiciary** checks whether the thing is actually acceptable.
@@ -23,6 +23,7 @@ It is about making AI accountable.
 如果 AI Agent 真的要參與決策，那它們也應該被治理。
 
 這套框架借用的是 **三權分立**：
+
 - **立法權** 定義什麼叫成功。
 - **行政權** 負責把東西做出來。
 - **司法權** 負責檢查成果到底合不合格。

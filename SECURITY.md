@@ -1,6 +1,4 @@
-# Security Policy
-
-安全性政策
+# Security Policy / 安全性政策
 
 ## Reporting a vulnerability / 回報弱點
 

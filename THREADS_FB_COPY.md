@@ -17,12 +17,14 @@ GitHub: [paste your link]
 
 ### Threads copy, English version
 
-I turned AI agent collaboration into a system of separation of powers + harness engineering.
+I turned AI agent collaboration into a system of separation of powers +
+ harness engineering.
 
 Legislative defines success, Executive builds it, Judiciary verifies it.
 Not free-form chat, but institutional AI governance.
 
-If you're tired of vague requirements, hallucinated output, and fake completion, this framework is worth a look.
+If you're tired of vague requirements, hallucinated output, and fake
+completion, this framework is worth a look.
 
 GitHub: [paste your link]
 
@@ -46,7 +48,8 @@ GitHub: [paste your link]
 
 ### Facebook copy, English version
 
-I built an AI agent governance framework based on separation of powers + harness engineering.
+I built an AI agent governance framework based on separation of powers +
+ harness engineering.
 
 The flow is simple:
 
@@ -56,7 +59,9 @@ The flow is simple:
 - Harness turns verification into repeatable tests
 
 This is not just another agent chat setup.
-It is a structured system you can use for projects, apps, and requirement validation.
-If you want to see how AI can move from chaos to governance, grab it on GitHub.
+It is a structured system you can use for projects, apps, and requirement
+validation.
+If you want to see how AI can move from chaos to governance, grab it on
+GitHub.
 
 GitHub: [paste your link]
