@@ -64,6 +64,10 @@ Agent 可以互相對話，但沒有人強迫它們先定義什麼叫成功。
 
 ## System model / 系統模型
 
+This version adds a constitution layer, feedback loops, role isolation, and a hard harness gate.
+
+這個版本加入了憲法層、反向回饋、角色隔離，以及強制的 harness gate。
+
 ```text
 User / 使用者
   -> Legislative / 立法權
@@ -114,7 +118,8 @@ Produces:
 
 #### Judiciary / 司法權
 
-Checks the output against the law.
+Checks the output against the law and constitution.
+Can approve, reject, or request an amendment.
 Returns:
 
 - passed
@@ -132,6 +137,7 @@ Returns:
 
 Defines how proof is collected.
 A claim is not complete unless it can be tested.
+Judgment cannot happen until the harness gate is satisfied.
 
 定義怎麼收集證據。
 一個主張如果不能被驗證，就不算完成。
@@ -149,6 +155,7 @@ A claim is not complete unless it can be tested.
 
 4. **Rework if needed / 必要時返工**
    - If a red line is hit, the task goes back for revision.
+   - Rework is capped to avoid infinite loops.
 
 ## Technical examples / 技術範例
 
@@ -276,7 +283,18 @@ These examples are written like technical specs, not marketing copy.
 
 ## Repo docs / 文件索引
 
+### Core governance / 核心治理
+
+- [Constitution / 憲法層](CONSTITUTION.md)
+- [Governance architecture / 治理架構](docs/governance-architecture.md)
+- [Governance config / 治理設定](config/governance.yaml)
+- [Governance validator / 治理驗證腳本](scripts/validate_governance.py)
+
+### Examples and references / 範例與參考
+
 - [Example app law / APP 法律範例](examples/app_law_example.md)
+- [Governance cycle example / 治理流程範例](examples/governance_cycle.md)
+- [APP law example / APP 法律範例](examples/app_law_example.md)
 - [Harness test examples / Harness 測試例子](tests/harness_examples.md)
 - [Data flow and state machine / 資料流與狀態機](docs/state-machine.md)
 - [CLI and API reference / CLI 與 API 參考](docs/cli-api-reference.md)

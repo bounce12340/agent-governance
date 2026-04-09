@@ -42,6 +42,12 @@ It is about making AI accountable.
 - Strong audit trail / 完整稽核軌跡
 - Bilingual docs / 雙語文件
 
+## Governance improvements / 治理改良
+
+This repo now includes a constitution layer, harness gate, role isolation, and reverse feedback paths.
+
+這個 repo 現在加入了憲法層、harness gate、角色隔離，以及反向回饋通道。
+
 ## What this is not / 這不是什麼
 
 - Not free-form agent chat / 不是自由聊天型 Agent
