@@ -1,36 +1,61 @@
 # AI Governance Framework for Multi-Agent Systems
 
-多 Agent AI 治理框架，結合三權分立與 Harness Engineering。
+A governed multi-agent system for teams that need clear acceptance criteria,
+auditable execution, and reviewable verdicts.
+
+多 Agent AI 治理框架，為需要清楚驗收、可稽核執行、可審查判決的團隊而設。
 
 [![CI](https://github.com/bounce12340/agent-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bounce12340/agent-governance/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/bounce12340/agent-governance)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-bilingual-brightgreen)](README.md)
 
-A bilingual governance framework for AI agents based on **separation of powers** and **harness engineering**.
-
-一套結合 **三權分立** 與 **Harness Engineering** 的雙語 AI Agent 治理框架。
-
-## What this is / 這是什麼
+## Product overview / 產品概覽
 
 ### English
 
-This project treats AI collaboration as a governed system, not a free-form chat.
-Every task goes through a strict pipeline:
+This repo turns AI collaboration into a governed workflow.
+Instead of letting agents chat freely, it gives every task:
 
-- **Legislative** defines the law.
-- **Executive** builds within the law.
-- **Judiciary** verifies the result.
-- **Harness Engineering** makes proof, tests, and evidence mandatory.
+- a law
+- an executor
+- a judge
+- a harness gate
+
+That means you can define success first, build inside the rules, and review the result with evidence.
 
 ### 繁體中文
 
-這個專案把 AI 協作當成「有制度的系統」，不是自由聊天。
-每個任務都要經過嚴格流程：
+這個 repo 把 AI 協作變成一套有制度的流程。
+不是讓 agent 自由聊天，而是讓每個任務都先具備：
 
-- **立法權** 定義法律。
-- **行政權** 在法律內執行。
-- **司法權** 驗證成果。
-- **Harness Engineering** 讓測試、證據、驗收成為必要條件。
+- 法律
+- 執行者
+- 審查者
+- harness 門檻
+
+也就是先定義成功，再在規則內實作，最後用證據審查結果。
+
+## What this is good for / 適合做什麼
+
+- App planning / App 規劃
+- Requirement validation / 需求驗證
+- Code review governance / 程式碼審查治理
+- Launch decision making / 上線決策
+- Multi-agent accountability / 多 Agent 問責流程
+
+## Quick tour / 快速導覽
+
+- **Constitution**: global rules that every case must obey.
+- **Legislative**: turns requests into laws and acceptance criteria.
+- **Executive**: executes within the law.
+- **Harness**: blocks judgment until evidence is ready.
+- **Judiciary**: verifies the output and can request amendments.
+
+- **憲法層**：所有案件都要遵守的全域規則。
+- **立法權**：把需求轉成法律與驗收標準。
+- **行政權**：只在法律內執行。
+- **Harness**：證據沒準備好，就不能進司法審查。
+- **司法權**：驗證輸出，必要時可以要求修法。
 
 ## Why it exists / 為什麼要做這個
 
@@ -64,14 +89,17 @@ Agent 可以互相對話，但沒有人強迫它們先定義什麼叫成功。
 
 ## System model / 系統模型
 
-This version adds a constitution layer, feedback loops, role isolation, and a hard harness gate.
+This version adds a constitution layer, feedback loops, role isolation,
+and a hard harness gate.
 
 這個版本加入了憲法層、反向回饋、角色隔離，以及強制的 harness gate。
 
 ```text
 User / 使用者
+  -> Constitution / 憲法層
   -> Legislative / 立法權
   -> Executive / 行政權
+  -> Harness gate / 證據門檻
   -> Judiciary / 司法權
   -> Verdict / 最終判定
 ```
@@ -150,10 +178,13 @@ Judgment cannot happen until the harness gate is satisfied.
 2. **Execute / 執行**
    - Build only inside the law.
 
-3. **Verify / 驗證**
+3. **Submit harness / 提交證據**
+   - Package tests, evidence, and failure notes.
+
+4. **Verify / 驗證**
    - Run the harness and issue a verdict.
 
-4. **Rework if needed / 必要時返工**
+5. **Rework if needed / 必要時返工**
    - If a red line is hit, the task goes back for revision.
    - Rework is capped to avoid infinite loops.
 
@@ -292,7 +323,6 @@ These examples are written like technical specs, not marketing copy.
 
 ### Examples and references / 範例與參考
 
-- [Example app law / APP 法律範例](examples/app_law_example.md)
 - [Governance cycle example / 治理流程範例](examples/governance_cycle.md)
 - [APP law example / APP 法律範例](examples/app_law_example.md)
 - [Harness test examples / Harness 測試例子](tests/harness_examples.md)

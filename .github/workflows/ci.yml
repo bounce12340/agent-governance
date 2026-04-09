@@ -23,3 +23,17 @@ jobs:
 
       - name: Lint markdown
         run: markdownlint-cli2 "**/*.md" "!node_modules"
+
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate governance config
+        run: python3 scripts/validate_governance.py config/governance.yaml

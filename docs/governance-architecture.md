@@ -2,79 +2,171 @@
 
 ## English
 
-This repo is organized around five core ideas:
+This repo is built as a five-layer governance system.
+Each layer has a different job, a different authority, and a different review boundary.
 
-1. **Constitution layer**
-   - Global constraints that apply to every task.
-   - Prevents local laws from violating platform-wide rules.
+### 1. Constitution layer
 
-2. **Legislative layer**
-   - Turns requests into laws.
-   - Produces acceptance criteria, red lines, and metrics.
+The constitution layer defines global rules that apply to every case.
+It answers the question: what is never allowed, no matter what the law says?
 
-3. **Executive layer**
-   - Executes only inside the law.
-   - Produces deliverables and evidence.
+Examples:
 
-4. **Harness layer**
-   - Defines how proof is collected.
-   - Blocks judgment if the evidence bundle is incomplete.
+- no secret leakage
+- no personal data leakage
+- no bypassing mandatory review
+- no self-judging of original reasoning
+- no judgment without harness evidence
 
-5. **Judiciary layer**
-   - Verifies the result against the law and constitution.
-   - Can approve, reject, or request amendments.
+### 2. Legislative layer
+
+The legislative layer converts a request into law.
+It produces the acceptance criteria, metrics, red lines, and evidence requirements.
+
+Output examples:
+
+- `LAW-001`
+- acceptance criteria
+- red lines
+- retry cap
+
+### 3. Executive layer
+
+The executive layer builds the deliverable.
+It can only work within the law and constitution.
+It produces the actual output plus supporting evidence.
+
+Output examples:
+
+- `CASE-001`
+- implementation
+- logs
+- screenshots
+- test artifacts
+
+### 4. Harness layer
+
+The harness layer defines how proof is collected.
+It is a hard gate, not a suggestion.
+If the evidence bundle is incomplete, the case is not ready for judgment.
+
+Required artifacts:
+
+- test plan
+- evidence bundle
+- output snapshot
+- failure mode notes
+
+### 5. Judiciary layer
+
+The judiciary layer checks the output against the law and constitution.
+It can:
+
+- pass the case
+- reject the case
+- request rework
+- request a law clarification
+- request a law amendment
 
 ### Feedback paths
 
-- **Judiciary -> Legislative**: law amendment request
-- **Executive -> Legislative**: clarification request
-- **Harness -> Judiciary**: incomplete or invalid evidence
+A real governance system needs reverse feedback, not just a one-way pipeline.
+
+- Judiciary -> Legislative: law amendment request
+- Executive -> Legislative: clarification request
+- Harness -> Judiciary: incomplete evidence notice
 
 ### Rework control
 
-To avoid infinite loops, rework is capped.
-After a fixed number of failed cycles, the case is rejected.
+Rework is capped to prevent infinite loops.
+After the maximum retry count, the case is rejected.
 
 ### Role isolation
 
-Each role must be isolated.
-That means separate prompts, separate authority, and separate access to internal reasoning.
-A role should not be able to audit its own original decision.
+Each role must stay isolated.
+This means separate prompts, separate authority, and separate access to internal reasoning.
+A role should not be allowed to audit its own original decision.
 
 ## 繁體中文
 
-這個 repo 由五個核心概念組成：
+這個 repo 以五層治理系統來組成。
+每一層都有不同工作、不同權限、不同的審查邊界。
 
-1. **憲法層**
-   - 套用在所有任務上的全域限制。
-   - 避免下位法律違反平台底線。
+### 1. 憲法層
 
-2. **立法層**
-   - 把需求轉成法律。
-   - 產出驗收標準、紅線與指標。
+憲法層定義所有案件都必須遵守的全域規則。
+它回答的問題是：不管法律怎麼寫，什麼事情永遠不能做？
 
-3. **行政層**
-   - 只能在法律內執行。
-   - 產出交付物與證據。
+例如：
 
-4. **Harness 層**
-   - 定義怎麼收集證據。
-   - 若證據包不完整，就不能進司法審查。
+- 不能外洩 secret
+- 不能外洩個人資料
+- 不能跳過必要審查
+- 不能自己審自己的原始思路
+- 沒有 Harness 證據就不能判決
 
-5. **司法層**
-   - 把結果和法律、憲法逐條比對。
-   - 可以通過、拒絕，或要求修法。
+### 2. 立法層
+
+立法層負責把需求轉成法律。
+它產出驗收標準、指標、紅線與證據需求。
+
+輸出範例：
+
+- `LAW-001`
+- 驗收標準
+- 紅線
+- 重試上限
+
+### 3. 行政層
+
+行政層負責把東西做出來。
+它只能在法律與憲法內工作。
+它會產出真正的結果與證據。
+
+輸出範例：
+
+- `CASE-001`
+- 實作內容
+- logs
+- 截圖
+- 測試 artefacts
+
+### 4. Harness 層
+
+Harness 層定義如何收集證據。
+它是硬門檻，不是建議。
+如果證據包不完整，案件就不能進司法審查。
+
+必備項目：
+
+- test plan
+- evidence bundle
+- output snapshot
+- failure mode notes
+
+### 5. 司法層
+
+司法層負責把輸出和法律、憲法逐條比對。
+它可以：
+
+- 通過案件
+- 拒絕案件
+- 要求返工
+- 要求法律澄清
+- 要求法律修正
 
 ### 回饋路徑
 
-- **司法 -> 立法**：法律修正請求
-- **行政 -> 立法**：法律澄清請求
-- **Harness -> 司法**：證據不完整或無效
+真正的治理系統需要反向回饋，而不只是單向流程。
+
+- 司法 -> 立法：法律修正請求
+- 行政 -> 立法：澄清請求
+- Harness -> 司法：證據不足通知
 
 ### Rework 控制
 
-為了避免無限迴圈，rework 必須設上限。
-超過固定次數後，案件會被直接拒絕。
+Rework 必須設上限，避免無限迴圈。
+超過最大重試次數後，案件就會被拒絕。
 
 ### 角色隔離
 
