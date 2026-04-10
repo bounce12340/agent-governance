@@ -57,7 +57,25 @@ Required artifacts:
 - output snapshot
 - failure mode notes
 
-### 5. Judiciary layer
+### 5. Long-task supervision
+
+Long-running work needs checkpointing.
+The main agent should report progress before the task goes silent.
+
+Checkpoint fields:
+
+- completed
+- blocked
+- next step
+- ETA
+
+Escalation path:
+
+- missed checkpoint -> request update
+- repeated misses -> clarification request
+- repeated misses after limit -> rework or rejection
+
+### 6. Judiciary layer
 
 The judiciary layer checks the output against the law and constitution.
 It can:
@@ -75,6 +93,24 @@ A real governance system needs reverse feedback, not just a one-way pipeline.
 - Judiciary -> Legislative: law amendment request
 - Executive -> Legislative: clarification request
 - Harness -> Judiciary: incomplete evidence notice
+
+### Long-task supervision
+
+Long-running work needs checkpointing.
+A main agent that stays silent too long should be treated as a supervision failure.
+
+Recommended checkpoint fields:
+
+- completed
+- blocked
+- next step
+- ETA
+
+Escalation path:
+
+- missed checkpoint -> request update
+- repeated misses -> clarification request
+- repeated misses after limit -> rework or rejection
 
 ### Rework control
 
@@ -144,7 +180,25 @@ Harness 層定義如何收集證據。
 - output snapshot
 - failure mode notes
 
-### 5. 司法層
+### 5. 長任務監督
+
+長任務需要 checkpoint。
+main agent 不能一直做事卻不回報。
+
+checkpoint 欄位：
+
+- completed
+- blocked
+- next step
+- ETA
+
+升級路徑：
+
+- 漏報 checkpoint -> 要求補回報
+- 持續漏報 -> 澄清請求
+- 超過上限仍漏報 -> 返工或拒絕
+
+### 6. 司法層
 
 司法層負責把輸出和法律、憲法逐條比對。
 它可以：
@@ -162,6 +216,24 @@ Harness 層定義如何收集證據。
 - 司法 -> 立法：法律修正請求
 - 行政 -> 立法：澄清請求
 - Harness -> 司法：證據不足通知
+
+### 長任務監督
+
+長任務需要 checkpoint。
+如果 main agent 太久沒有回報，就應該視為監督失敗。
+
+建議的 checkpoint 欄位：
+
+- completed
+- blocked
+- next step
+- ETA
+
+升級路徑：
+
+- 漏報 checkpoint -> 要求補回報
+- 持續漏報 -> 澄清請求
+- 超過上限仍漏報 -> 返工或拒絕
 
 ### Rework 控制
 

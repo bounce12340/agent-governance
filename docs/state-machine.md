@@ -31,6 +31,12 @@ Every task must move through the system in a predictable order.
    - Approve, reject, or request amendment.
    - Output: `JUDGMENT-XXXX`
 
+5. **Long-task checkpointing**
+
+   - For long tasks, periodic checkpoints must be reported.
+   - Missing checkpoints are treated as a supervision failure.
+   - Output: `CHECKPOINT-XXXX`
+
 ### State machine
 
 ```text
@@ -95,6 +101,12 @@ Every transition should leave evidence:
    - 把輸出和法律、憲法逐條比對。
    - 通過、退回，或要求修法。
    - 輸出：`JUDGMENT-XXXX`
+
+5. **長任務 checkpoint**
+
+   - 長任務必須定期回報 checkpoint。
+   - 漏報視為監督失敗。
+   - 輸出：`CHECKPOINT-XXXX`
 
 ### 狀態機
 

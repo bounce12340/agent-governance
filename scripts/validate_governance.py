@@ -46,6 +46,18 @@ REQUIRED_ARTIFACTS = {
     "failure_mode_notes",
 }
 
+REQUIRED_LONG_TASK_KEYS = {
+    "enabled",
+    "require_periodic_checkpoints",
+    "checkpoint_interval_minutes",
+    "checkpoint_grace_minutes",
+    "max_missed_checkpoints",
+    "escalation_on_miss",
+    "require_progress_summary",
+}
+
+REQUIRED_PROGRESS_FIELDS = {"completed", "blocked", "next_step", "eta"}
+
 ROLE_NAMES = {"legislative", "executive", "judiciary"}
 
 
@@ -224,6 +236,52 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
             errors.append(
                 "constitution.allow_executive_clarification_request must be true"
             )
+
+    long_task = as_mapping(doc.get("long_task"), "long_task", errors)
+    if long_task:
+        missing_long_task_keys = sorted(REQUIRED_LONG_TASK_KEYS - set(long_task.keys()))
+        if missing_long_task_keys:
+            errors.append(
+                f"long_task missing keys: {', '.join(missing_long_task_keys)}"
+            )
+        if long_task.get("enabled") is not True:
+            errors.append("long_task.enabled must be true")
+        if long_task.get("require_periodic_checkpoints") is not True:
+            errors.append(
+                "long_task.require_periodic_checkpoints must be true"
+            )
+        interval = long_task.get("checkpoint_interval_minutes")
+        grace = long_task.get("checkpoint_grace_minutes")
+        missed = long_task.get("max_missed_checkpoints")
+        if not isinstance(interval, int) or interval < 1:
+            errors.append(
+                "long_task.checkpoint_interval_minutes must be a positive integer"
+            )
+        if not isinstance(grace, int) or grace < 0:
+            errors.append(
+                "long_task.checkpoint_grace_minutes must be a non-negative integer"
+            )
+        if not isinstance(missed, int) or missed < 1:
+            errors.append(
+                "long_task.max_missed_checkpoints must be a positive integer"
+            )
+        if long_task.get("escalation_on_miss") != "LAW_CLARIFICATION_REQUEST":
+            errors.append(
+                "long_task.escalation_on_miss must be LAW_CLARIFICATION_REQUEST"
+            )
+        summary = long_task.get("require_progress_summary")
+        if not isinstance(summary, list):
+            errors.append(
+                "long_task.require_progress_summary must be a list"
+            )
+        else:
+            summary_set = {str(item) for item in summary}
+            missing_summary = sorted(REQUIRED_PROGRESS_FIELDS - summary_set)
+            if missing_summary:
+                errors.append(
+                    "long_task.require_progress_summary missing: "
+                    + ", ".join(missing_summary)
+                )
 
     role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
     for role in ROLE_NAMES:

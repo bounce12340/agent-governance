@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "constitution": {
+    "require_harness_before_judgment": true,
+    "max_rework_count": 3,
+    "allow_judiciary_law_amendment_request": true,
+    "allow_executive_clarification_request": true
+  },
+  "long_task": {
+    "enabled": true,
+    "require_periodic_checkpoints": true,
+    "checkpoint_interval_minutes": 30,
+    "checkpoint_grace_minutes": 10,
+    "max_missed_checkpoints": 2,
+    "escalation_on_miss": "LAW_CLARIFICATION_REQUEST",
+    "require_progress_summary": ["completed", "blocked", "next_step", "eta"]
+  },
+  "role_isolation": {
+    "legislative": {
+      "model": "separate",
+      "prompt_scope": "law_writing_only",
+      "may_read": ["user_request", "constitution"],
+      "may_not_read": ["executive_private_notes", "judiciary_verdict_details"]
+    },
+    "executive": {
+      "model": "separate",
+      "prompt_scope": "execution_only",
+      "may_read": ["user_request", "law", "constitution"],
+      "may_not_read": ["judiciary_private_deliberation"]
+    },
+    "judiciary": {
+      "model": "separate",
+      "prompt_scope": "verification_only",
+      "may_read": ["law", "case_artifacts", "harness_artifacts", "constitution"],
+      "may_not_read": ["legislative_original_reasoning", "executive_private_notes"]
+    }
+  },
+  "workflow": {
+    "states": [
+      "NEW",
+      "LEGISLATIVE",
+      "EXECUTIVE",
+      "HARNESS_SUBMITTED",
+      "JUDICIARY",
+      "PASSED",
+      "REWORK",
+      "REJECTED",
+      "LAW_AMENDMENT_REQUEST",
+      "LAW_CLARIFICATION_REQUEST"
+    ],
+    "transitions": {
+      "NEW": ["LEGISLATIVE"],
+      "LEGISLATIVE": ["EXECUTIVE"],
+      "EXECUTIVE": ["HARNESS_SUBMITTED", "LAW_CLARIFICATION_REQUEST"],
+      "HARNESS_SUBMITTED": ["JUDICIARY"],
+      "JUDICIARY": ["PASSED", "REWORK", "REJECTED", "LAW_AMENDMENT_REQUEST"],
+      "REWORK": ["EXECUTIVE", "REJECTED"],
+      "LAW_AMENDMENT_REQUEST": ["LEGISLATIVE"],
+      "LAW_CLARIFICATION_REQUEST": ["LEGISLATIVE", "EXECUTIVE"]
+    }
+  },
+  "harness": {
+    "required_artifacts": [
+      "test_plan",
+      "evidence_bundle",
+      "output_snapshot",
+      "failure_mode_notes"
+    ],
+    "gate_behavior": {
+      "missing_artifacts": "INCOMPLETE",
+      "invalid_artifacts": "REWORK"
+    }
+  }
+}

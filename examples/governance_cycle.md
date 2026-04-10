@@ -26,10 +26,12 @@ The constitution layer is checked before any role begins.
 - Implement the core flow.
 - Produce screenshots and logs.
 - Prepare the harness artifacts.
+- Add long-task checkpoints if the work is lengthy.
 
 ### Step 4, Harness submission
 
 No judgment can happen before the harness gate is passed.
+If the task is long-running, progress checkpoints must also be submitted.
 
 - Submit tests.
 - Submit evidence bundle.
@@ -74,10 +76,12 @@ Judiciary can return amendment requests or clarification requests.
 - 實作核心流程。
 - 產出截圖與 logs。
 - 準備 harness 證據包。
+- 如果是長任務，要另外加 checkpoint。
 
 ### 第 4 步，Harness 提交
 
 在通過 harness gate 之前，不能進司法判決。
+如果是長任務，還要附上進度 checkpoint。
 
 - 提交測試。
 - 提交證據包。
