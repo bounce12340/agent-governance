@@ -4,12 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A specification-and-documentation repo for a multi-agent AI governance framework
+Mostly a specification-and-documentation repo for a multi-agent AI governance framework
 (separation of powers: legislative / executive / judiciary, plus a harness evidence gate).
-There is no application runtime here. The only executable code is
-`scripts/validate_governance.py`. The `ai-gov` CLI and the `POST /laws`-style REST endpoints
-in `docs/cli-api-reference.md` are a *proposed* surface, not an implementation — do not
-assume they exist or try to run them.
+
+Two things are executable: `scripts/validate_governance.py` (config validator) and
+`runtime/` (binds each role to a model interface). Everything else is spec. In particular
+the `ai-gov` CLI and the `POST /laws`-style REST endpoints in `docs/cli-api-reference.md`
+are a *proposed* surface with no implementation — do not assume they exist or try to run
+them. `runtime/` does not execute the state machine either; it wires up roles and adapters.
 
 ## Commands
 
@@ -17,6 +19,16 @@ assume they exist or try to run them.
 # Validate the governance config (defaults to config/governance.yaml if path omitted)
 python3 scripts/validate_governance.py config/governance.yaml
 python3 scripts/validate_governance.py config/governance.json
+
+# Runtime tests — offline, no credentials, no dependencies
+python3 -m unittest discover -s tests -p 'test_*.py'
+
+# A single test class or method
+python3 -m unittest tests.test_runtime.RoleIsolationTest
+python3 -m unittest tests.test_runtime.RoleIsolationTest.test_forbidden_material_is_rejected
+
+# Report which model interface is bound to which role (calls no model)
+python3 -m runtime
 
 # Lint markdown exactly as CI does
 npx --yes markdownlint-cli2 "**/*.md" "!node_modules"
@@ -26,14 +38,15 @@ npx --yes markdownlint-cli2 README.md
 ```
 
 Validator exit codes: `0` pass, `1` file not found, `2` parse failure, `3` validation errors
-(each error printed as a `- <message>` line).
+(each error printed as a `- <message>` line). `python3 -m runtime` exits `1` if any
+credential is missing.
 
-CI (`.github/workflows/ci.yml`) runs two jobs on push/PR to `main`: markdownlint over all
-`**/*.md`, and the validator against `config/governance.yaml` only — `config/governance.json`
-is **not** covered by CI, so validate it manually after editing.
+CI (`.github/workflows/ci.yml`) runs three jobs on push/PR to `main`: markdownlint over all
+`**/*.md`, the validator against both configs, and the runtime tests. The runtime job runs
+with no secrets and no network — the `stub` interface exists so it can.
 
-`TESTS.md` is a manual review matrix (bilingual coverage, role completeness), not an
-automated suite. There is no test runner.
+`TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
+`tests/test_runtime.py`, which is the automated suite.
 
 ## Architecture: where the governance model actually lives
 
@@ -51,8 +64,11 @@ alone will either break CI or silently desync the docs from the enforced contrac
 4. **Prose docs** — `docs/state-machine.md` (state list + ASCII diagram),
    `docs/governance-architecture.md` (layer descriptions), `docs/loop-engineering.md`
    (loop contract + declared loops), `docs/graph-engineering.md` (graph invariants +
-   enumerated cycles), `CONSTITUTION.md` (non-negotiable rules). These restate the config
-   in both languages.
+   enumerated cycles), `docs/model-interfaces.md` (provider schema + adapter contract),
+   `CONSTITUTION.md` (non-negotiable rules). These restate the config in both languages.
+5. **`runtime/`** — consumes the config at run time. `runtime/adapters.py:INTERFACES` must
+   stay equal to `KNOWN_INTERFACES` in the validator; a test asserts this, so adding an
+   adapter without updating the validator fails CI.
 
 **Changing the state machine touches all of these at once.** Adding a transition can create
 a new cycle, and an undeclared cycle is a hard validation error — so a new transition
@@ -77,6 +93,12 @@ checks reachability from `NEW` and reverse reachability to a terminal state, req
 `graph.edges` to mirror `workflow.transitions` exactly in both directions, and cross-checks
 `loops.rework_loop.max_iterations` against `constitution.max_rework_count` and
 `loops.checkpoint_loop.max_iterations` against `long_task.max_missed_checkpoints`.
+
+For providers it enforces that `api_key_env` looks like an environment variable name rather
+than a literal key, that non-`stub` interfaces carry an `http(s)://` `base_url`, and that no
+two roles resolve to the same `(interface, base_url, model)` triple — that last one is what
+turns `model: separate` from a claim into a constraint, so **at least two distinct model
+configurations are required** for any valid config.
 
 These mirror the constitution's structural rules — harness before judgment, capped rework,
 role isolation, two-way feedback channels. Loosening one in the config without changing

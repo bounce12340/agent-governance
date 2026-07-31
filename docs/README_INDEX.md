@@ -8,6 +8,7 @@
 - [Long-task supervision / 長任務監督](long-task-supervision.md)
 - [Loop engineering / 迴圈工程](loop-engineering.md)
 - [Graph engineering / 圖工程](graph-engineering.md)
+- [Model interfaces / 模型接口](model-interfaces.md)
 
 ## Examples and references / 範例與參考
 

@@ -101,6 +101,23 @@ REQUIRED_GRAPH_INVARIANTS = {
 
 REQUIRED_EDGE_KEYS = {"guard", "required_evidence"}
 
+REQUIRED_PROVIDER_KEYS = {
+    "interface",
+    "base_url",
+    "model",
+    "api_key_env",
+    "timeout_seconds",
+    "max_output_tokens",
+}
+
+# Interfaces the runtime knows how to speak. Keep in sync with
+# runtime/adapters.py:INTERFACES.
+KNOWN_INTERFACES = {"openai_chat_completions", "anthropic_messages", "stub"}
+
+# The stub interface performs no network I/O, so it carries no endpoint and no
+# credential. Every other interface must carry both.
+OFFLINE_INTERFACES = {"stub"}
+
 ENTRY_STATE = "NEW"
 
 
@@ -451,6 +468,102 @@ def validate_graph(
         errors.append(f"undeclared cycle in workflow graph: {route}")
 
 
+def validate_providers(doc: dict[str, Any], errors: list[str]) -> dict[str, tuple[str, str, str]]:
+    """Check provider declarations and return each one's identity triple.
+
+    The triple is what makes two providers genuinely different endpoints
+    rather than two names pointing at the same model.
+    """
+    identities: dict[str, tuple[str, str, str]] = {}
+    providers = as_mapping(doc.get("providers"), "providers", errors)
+    if not providers:
+        return identities
+
+    for name in sorted(providers):
+        label = f"providers.{name}"
+        provider = as_mapping(providers.get(name), label, errors)
+        if not provider:
+            continue
+        missing_keys = sorted(REQUIRED_PROVIDER_KEYS - set(provider.keys()))
+        if missing_keys:
+            errors.append(f"{label} missing keys: {', '.join(missing_keys)}")
+
+        interface = provider.get("interface")
+        if interface not in KNOWN_INTERFACES:
+            errors.append(
+                f"{label}.interface must be one of: {', '.join(sorted(KNOWN_INTERFACES))}"
+            )
+        model = provider.get("model")
+        if not isinstance(model, str) or not model:
+            errors.append(f"{label}.model must be a non-empty string")
+        for key in ("timeout_seconds", "max_output_tokens"):
+            value = provider.get(key)
+            if not isinstance(value, int) or value < 1:
+                errors.append(f"{label}.{key} must be a positive integer")
+
+        base_url = provider.get("base_url")
+        api_key_env = provider.get("api_key_env")
+        if interface in OFFLINE_INTERFACES:
+            if base_url is not None:
+                errors.append(f"{label}.base_url must be null for the {interface} interface")
+            if api_key_env is not None:
+                errors.append(f"{label}.api_key_env must be null for the {interface} interface")
+        else:
+            if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
+                errors.append(f"{label}.base_url must be an http:// or https:// URL")
+            if not isinstance(api_key_env, str) or not api_key_env:
+                errors.append(f"{label}.api_key_env must name an environment variable")
+            # A literal credential in the config would be a constitution
+            # violation, so reject anything that does not look like a var name.
+            elif not re.fullmatch(r"[A-Z][A-Z0-9_]*", api_key_env):
+                errors.append(
+                    f"{label}.api_key_env must be an environment variable name, not a key value"
+                )
+
+        identities[name] = (str(interface), str(base_url), str(model))
+
+    return identities
+
+
+def validate_role_providers(
+    doc: dict[str, Any],
+    identities: dict[str, tuple[str, str, str]],
+    errors: list[str],
+) -> None:
+    """Every role must name a declared provider, and no two may share a model.
+
+    role_isolation already asserts `model: separate` for all three roles. This
+    is what makes that claim real instead of decorative: a judiciary running the
+    same model as the legislative role is not isolated, it is the same reasoning
+    reviewing itself.
+    """
+    role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
+    if not role_isolation:
+        return
+
+    bound: dict[str, tuple[str, str, str]] = {}
+    for role in sorted(ROLE_NAMES):
+        role_cfg = as_mapping(role_isolation.get(role), f"role_isolation.{role}", errors)
+        if not role_cfg:
+            continue
+        provider = role_cfg.get("provider")
+        if not isinstance(provider, str) or not provider:
+            errors.append(f"role_isolation.{role}.provider must be a non-empty string")
+            continue
+        if provider not in identities:
+            errors.append(f"role_isolation.{role}.provider is not a declared provider: {provider}")
+            continue
+        bound[role] = identities[provider]
+
+    for role in sorted(bound):
+        for other in sorted(bound):
+            if role < other and bound[role] == bound[other]:
+                errors.append(
+                    f"role_isolation.{role} and role_isolation.{other} resolve to the "
+                    "same interface, base_url and model, so they are not isolated"
+                )
+
+
 def validate_config(doc: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
@@ -584,6 +697,9 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
                 errors.append("harness.gate_behavior.missing_artifacts must be INCOMPLETE")
             if gate_behavior.get("invalid_artifacts") != "REWORK":
                 errors.append("harness.gate_behavior.invalid_artifacts must be REWORK")
+
+    identities = validate_providers(doc, errors)
+    validate_role_providers(doc, identities, errors)
 
     declared_cycles = validate_loops(doc, state_set, transition_map, errors)
     validate_graph(doc, state_set, transition_map, declared_cycles, errors)

@@ -37,3 +37,22 @@ jobs:
 
       - name: Validate governance config
         run: python3 scripts/validate_governance.py config/governance.yaml
+
+      - name: Validate governance config (JSON duplicate)
+        run: python3 scripts/validate_governance.py config/governance.json
+
+  runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # No credentials and no network: the stub interface exists so the whole
+      # governance flow stays testable without either.
+      - name: Run runtime tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'

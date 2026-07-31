@@ -14,6 +14,12 @@ All notable changes to this project will be documented here.
   stagnation rules, and iteration bounds for all four loops
 - Graph engineering layer: machine-checked graph invariants, guarded edges,
   and cycle enumeration that rejects any undeclared cycle
+- Model interface layer: a `providers` config block, per-role provider binding,
+  and a dependency-free `runtime/` that speaks the OpenAI chat-completions and
+  Anthropic messages interfaces plus an offline stub
+- Role isolation is now enforced across models: no two roles may resolve to the
+  same interface, endpoint and model
+- Offline runtime test suite and a third CI job that runs it without secrets
 - `CLAUDE.md` guidance for Claude Code
 
 ### Changed

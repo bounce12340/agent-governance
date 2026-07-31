@@ -15,21 +15,58 @@
     "escalation_on_miss": "LAW_CLARIFICATION_REQUEST",
     "require_progress_summary": ["completed", "blocked", "next_step", "eta"]
   },
+  "providers": {
+    "openai_primary": {
+      "interface": "openai_chat_completions",
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "timeout_seconds": 60,
+      "max_output_tokens": 4096
+    },
+    "anthropic_primary": {
+      "interface": "anthropic_messages",
+      "base_url": "https://api.anthropic.com/v1",
+      "model": "claude-opus-5",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "timeout_seconds": 60,
+      "max_output_tokens": 4096
+    },
+    "openai_compatible_local": {
+      "interface": "openai_chat_completions",
+      "base_url": "http://localhost:11434/v1",
+      "model": "llama3.1",
+      "api_key_env": "LOCAL_MODEL_API_KEY",
+      "timeout_seconds": 120,
+      "max_output_tokens": 4096
+    },
+    "offline_stub": {
+      "interface": "stub",
+      "base_url": null,
+      "model": "stub",
+      "api_key_env": null,
+      "timeout_seconds": 1,
+      "max_output_tokens": 1024
+    }
+  },
   "role_isolation": {
     "legislative": {
       "model": "separate",
+      "provider": "anthropic_primary",
       "prompt_scope": "law_writing_only",
       "may_read": ["user_request", "constitution"],
       "may_not_read": ["executive_private_notes", "judiciary_verdict_details"]
     },
     "executive": {
       "model": "separate",
+      "provider": "openai_primary",
       "prompt_scope": "execution_only",
       "may_read": ["user_request", "law", "constitution"],
       "may_not_read": ["judiciary_private_deliberation"]
     },
     "judiciary": {
       "model": "separate",
+      "provider": "openai_compatible_local",
       "prompt_scope": "verification_only",
       "may_read": ["law", "case_artifacts", "harness_artifacts", "constitution"],
       "may_not_read": ["legislative_original_reasoning", "executive_private_notes"]
