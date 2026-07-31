@@ -323,6 +323,8 @@ These examples are written like technical specs, not marketing copy.
 - [Governance config / 治理設定](config/governance.yaml)
 - [Governance validator / 治理驗證腳本](scripts/validate_governance.py)
 - [Long-task supervision / 長任務監督](docs/long-task-supervision.md)
+- [Loop engineering / 迴圈工程](docs/loop-engineering.md)
+- [Graph engineering / 圖工程](docs/graph-engineering.md)
 
 ### Examples and references / 範例與參考
 
