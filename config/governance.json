@@ -70,5 +70,140 @@
       "missing_artifacts": "INCOMPLETE",
       "invalid_artifacts": "REWORK"
     }
+  },
+  "loops": {
+    "rework_loop": {
+      "scope": "graph",
+      "paths": [["JUDICIARY", "REWORK", "EXECUTIVE", "HARNESS_SUBMITTED"]],
+      "entry_condition": "judiciary_returns_rework",
+      "convergence_metric": "unresolved_law_items",
+      "exit_condition": "unresolved_law_items_is_zero",
+      "max_iterations": 3,
+      "per_iteration_artifact": "rework_diff_note",
+      "stagnation_rule": "identical_evidence_twice",
+      "escalation_target": "REJECTED"
+    },
+    "clarification_loop": {
+      "scope": "graph",
+      "paths": [
+        ["EXECUTIVE", "LAW_CLARIFICATION_REQUEST"],
+        ["EXECUTIVE", "LAW_CLARIFICATION_REQUEST", "LEGISLATIVE"]
+      ],
+      "entry_condition": "executive_reports_ambiguous_law",
+      "convergence_metric": "open_ambiguity_items",
+      "exit_condition": "open_ambiguity_items_is_zero",
+      "max_iterations": 2,
+      "per_iteration_artifact": "ambiguity_notes",
+      "stagnation_rule": "identical_ambiguity_twice",
+      "escalation_target": "LAW_AMENDMENT_REQUEST"
+    },
+    "amendment_loop": {
+      "scope": "graph",
+      "paths": [
+        ["JUDICIARY", "LAW_AMENDMENT_REQUEST", "LEGISLATIVE", "EXECUTIVE", "HARNESS_SUBMITTED"]
+      ],
+      "entry_condition": "judiciary_requests_law_amendment",
+      "convergence_metric": "defective_law_items",
+      "exit_condition": "defective_law_items_is_zero",
+      "max_iterations": 2,
+      "per_iteration_artifact": "amendment_reason",
+      "stagnation_rule": "identical_amendment_twice",
+      "escalation_target": "REJECTED"
+    },
+    "checkpoint_loop": {
+      "scope": "supervision",
+      "paths": [],
+      "entry_condition": "long_task_started",
+      "convergence_metric": "missed_checkpoints",
+      "exit_condition": "task_reaches_harness_submitted",
+      "max_iterations": 2,
+      "per_iteration_artifact": "progress_summary",
+      "stagnation_rule": "identical_progress_summary_twice",
+      "escalation_target": "LAW_CLARIFICATION_REQUEST"
+    }
+  },
+  "graph": {
+    "terminal_states": ["PASSED", "REJECTED"],
+    "invariants": {
+      "require_all_states_reachable": true,
+      "require_terminal_reachable_from_all": true,
+      "require_terminal_states_are_sinks": true,
+      "require_every_cycle_declared": true,
+      "require_edge_guards": true
+    },
+    "edges": {
+      "NEW": {
+        "LEGISLATIVE": {
+          "guard": "request_received",
+          "required_evidence": "user_request"
+        }
+      },
+      "LEGISLATIVE": {
+        "EXECUTIVE": {
+          "guard": "law_published",
+          "required_evidence": "acceptance_criteria"
+        }
+      },
+      "EXECUTIVE": {
+        "HARNESS_SUBMITTED": {
+          "guard": "all_required_artifacts_present",
+          "required_evidence": "evidence_bundle"
+        },
+        "LAW_CLARIFICATION_REQUEST": {
+          "guard": "law_ambiguous",
+          "required_evidence": "ambiguity_notes"
+        }
+      },
+      "HARNESS_SUBMITTED": {
+        "JUDICIARY": {
+          "guard": "harness_gate_satisfied",
+          "required_evidence": "test_plan"
+        }
+      },
+      "JUDICIARY": {
+        "PASSED": {
+          "guard": "all_law_items_proven",
+          "required_evidence": "output_snapshot"
+        },
+        "REWORK": {
+          "guard": "law_items_unproven",
+          "required_evidence": "failure_mode_notes"
+        },
+        "REJECTED": {
+          "guard": "red_line_violated",
+          "required_evidence": "failure_mode_notes"
+        },
+        "LAW_AMENDMENT_REQUEST": {
+          "guard": "law_defective",
+          "required_evidence": "amendment_reason"
+        }
+      },
+      "REWORK": {
+        "EXECUTIVE": {
+          "guard": "rework_budget_remaining",
+          "required_evidence": "rework_diff_note"
+        },
+        "REJECTED": {
+          "guard": "rework_budget_exhausted",
+          "required_evidence": "rework_diff_note"
+        }
+      },
+      "LAW_AMENDMENT_REQUEST": {
+        "LEGISLATIVE": {
+          "guard": "amendment_accepted",
+          "required_evidence": "amendment_reason"
+        }
+      },
+      "LAW_CLARIFICATION_REQUEST": {
+        "LEGISLATIVE": {
+          "guard": "clarification_needs_law_change",
+          "required_evidence": "ambiguity_notes"
+        },
+        "EXECUTIVE": {
+          "guard": "clarification_resolved_in_place",
+          "required_evidence": "ambiguity_notes"
+        }
+      }
+    }
   }
 }

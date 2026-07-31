@@ -19,6 +19,8 @@ These are global rules that apply to every law, case, and judgment.
 - Judiciary judges the output.
 - Harness Engineering must exist before judgment.
 - Rework must have a maximum retry count.
+- No loop may run without a declared exit condition and iteration limit.
+- Every cycle in the workflow graph must be a declared loop.
 
 ### Mandatory feedback channels
 
@@ -45,6 +47,8 @@ These are global rules that apply to every law, case, and judgment.
 - 司法權負責判決。
 - Harness Engineering 必須先存在，才能進司法審查。
 - Rework 必須有最大重試次數。
+- 沒有宣告退出條件與迭代上限的迴圈，不得進入執行。
+- 流程圖中的每一個環，都必須是已登記的迴圈。
 
 ### 必要回饋通道
 

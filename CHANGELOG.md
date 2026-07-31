@@ -10,6 +10,11 @@ All notable changes to this project will be documented here.
 - Technical docs for state machine and CLI/API reference
 - Example law and harness test files
 - Social copy for Threads and Facebook
+- Loop engineering layer: named loop contracts with convergence metrics,
+  stagnation rules, and iteration bounds for all four loops
+- Graph engineering layer: machine-checked graph invariants, guarded edges,
+  and cycle enumeration that rejects any undeclared cycle
+- `CLAUDE.md` guidance for Claude Code
 
 ### Changed
 

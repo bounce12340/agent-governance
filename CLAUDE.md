@@ -44,12 +44,20 @@ alone will either break CI or silently desync the docs from the enforced contrac
 2. **`config/governance.json`** — a byte-for-byte-equivalent duplicate of the YAML. Keep in sync.
 3. **`scripts/validate_governance.py`** — hardcodes the *required minimums* as module-level
    constants: `REQUIRED_STATES`, `REQUIRED_TRANSITIONS`, `REQUIRED_ARTIFACTS`,
-   `REQUIRED_LONG_TASK_KEYS`, `REQUIRED_PROGRESS_FIELDS`, `ROLE_NAMES`. Adding a workflow
-   state or harness artifact to the config alone does nothing; the validator only enforces
-   what is listed here.
+   `REQUIRED_LONG_TASK_KEYS`, `REQUIRED_PROGRESS_FIELDS`, `ROLE_NAMES`,
+   `REQUIRED_LOOP_NAMES`, `REQUIRED_LOOP_KEYS`, `REQUIRED_GRAPH_INVARIANTS`,
+   `REQUIRED_EDGE_KEYS`. Adding a workflow state or harness artifact to the config alone
+   does nothing; the validator only enforces what is listed here.
 4. **Prose docs** — `docs/state-machine.md` (state list + ASCII diagram),
-   `docs/governance-architecture.md` (layer descriptions), `CONSTITUTION.md` (non-negotiable
-   rules). These restate the config in both languages.
+   `docs/governance-architecture.md` (layer descriptions), `docs/loop-engineering.md`
+   (loop contract + declared loops), `docs/graph-engineering.md` (graph invariants +
+   enumerated cycles), `CONSTITUTION.md` (non-negotiable rules). These restate the config
+   in both languages.
+
+**Changing the state machine touches all of these at once.** Adding a transition can create
+a new cycle, and an undeclared cycle is a hard validation error — so a new transition
+usually also needs a `loops` entry, a `graph.edges` entry with `guard` and
+`required_evidence`, and the cycle list in `docs/graph-engineering.md` updated.
 
 ### What the validator enforces
 
@@ -62,6 +70,13 @@ are asserted: `constitution.require_harness_before_judgment: true`,
 `harness.gate_behavior.missing_artifacts: INCOMPLETE`,
 `harness.gate_behavior.invalid_artifacts: REWORK`, and every role in `role_isolation` having
 `model: separate` with non-empty `may_read` / `may_not_read`.
+
+It also derives facts from the graph rather than trusting the config: it enumerates every
+simple cycle in `workflow.transitions` and fails on any cycle not declared in `loops`,
+checks reachability from `NEW` and reverse reachability to a terminal state, requires
+`graph.edges` to mirror `workflow.transitions` exactly in both directions, and cross-checks
+`loops.rework_loop.max_iterations` against `constitution.max_rework_count` and
+`loops.checkpoint_loop.max_iterations` against `long_task.max_missed_checkpoints`.
 
 These mirror the constitution's structural rules — harness before judgment, capped rework,
 role isolation, two-way feedback channels. Loosening one in the config without changing

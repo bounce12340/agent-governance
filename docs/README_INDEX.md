@@ -6,6 +6,8 @@
 - [Governance architecture / 治理架構](governance-architecture.md)
 - [Governance config / 治理設定](../config/governance.yaml)
 - [Long-task supervision / 長任務監督](long-task-supervision.md)
+- [Loop engineering / 迴圈工程](loop-engineering.md)
+- [Graph engineering / 圖工程](graph-engineering.md)
 
 ## Examples and references / 範例與參考
 

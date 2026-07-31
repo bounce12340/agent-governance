@@ -47,6 +47,10 @@ NEW -> LEGISLATIVE -> EXECUTIVE -> HARNESS_SUBMITTED -> JUDICIARY -> PASSED
                          \-> REJECTED
 ```
 
+The invariants this graph must satisfy, and the four cycles it contains, are specified in
+[Graph engineering](graph-engineering.md) and bounded in
+[Loop engineering](loop-engineering.md).
+
 ### State rules
 
 - `NEW` means the task has not been formalized yet.
@@ -117,6 +121,9 @@ NEW -> LEGISLATIVE -> EXECUTIVE -> HARNESS_SUBMITTED -> JUDICIARY -> PASSED
                          \-> REWORK -> EXECUTIVE
                          \-> REJECTED
 ```
+
+這張圖必須滿足的不變式，以及圖中的四個環，
+規範於[圖工程](graph-engineering.md)，並由[迴圈工程](loop-engineering.md)設定上限。
 
 ### 狀態規則
 

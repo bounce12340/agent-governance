@@ -60,6 +60,49 @@ REQUIRED_PROGRESS_FIELDS = {"completed", "blocked", "next_step", "eta"}
 
 ROLE_NAMES = {"legislative", "executive", "judiciary"}
 
+REQUIRED_LOOP_NAMES = {
+    "rework_loop",
+    "clarification_loop",
+    "amendment_loop",
+    "checkpoint_loop",
+}
+
+REQUIRED_LOOP_KEYS = {
+    "scope",
+    "paths",
+    "entry_condition",
+    "convergence_metric",
+    "exit_condition",
+    "max_iterations",
+    "per_iteration_artifact",
+    "stagnation_rule",
+    "escalation_target",
+}
+
+LOOP_TEXT_KEYS = (
+    "entry_condition",
+    "convergence_metric",
+    "exit_condition",
+    "per_iteration_artifact",
+    "stagnation_rule",
+)
+
+LOOP_SCOPES = {"graph", "supervision"}
+
+REQUIRED_TERMINAL_STATES = {"PASSED", "REJECTED"}
+
+REQUIRED_GRAPH_INVARIANTS = {
+    "require_all_states_reachable",
+    "require_terminal_reachable_from_all",
+    "require_terminal_states_are_sinks",
+    "require_every_cycle_declared",
+    "require_edge_guards",
+}
+
+REQUIRED_EDGE_KEYS = {"guard", "required_evidence"}
+
+ENTRY_STATE = "NEW"
+
 
 class YamlParseError(ValueError):
     pass
@@ -215,6 +258,199 @@ def as_list(value: Any, label: str, errors: list[str]) -> list[Any]:
     return value
 
 
+def normalize_cycle(states: list[str]) -> tuple[str, ...]:
+    """Rotate a cycle so it starts at its lexicographically smallest state."""
+    if not states:
+        return ()
+    offset = states.index(min(states))
+    return tuple(states[offset:] + states[:offset])
+
+
+def reachable_from(start: str, edges: dict[str, list[str]]) -> set[str]:
+    seen = {start}
+    stack = [start]
+    while stack:
+        node = stack.pop()
+        for target in edges.get(node, []):
+            if target not in seen:
+                seen.add(target)
+                stack.append(target)
+    return seen
+
+
+def reverse_edges(edges: dict[str, list[str]]) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for source, targets in edges.items():
+        for target in targets:
+            result.setdefault(target, []).append(source)
+    return result
+
+
+def find_simple_cycles(edges: dict[str, list[str]]) -> set[tuple[str, ...]]:
+    """Enumerate every simple cycle, each rotated to a canonical start state.
+
+    Each cycle is only discovered from its smallest member, so the recorded
+    path is already in normalized form.
+    """
+    nodes = set(edges)
+    for targets in edges.values():
+        nodes.update(targets)
+    cycles: set[tuple[str, ...]] = set()
+
+    def walk(start: str, node: str, path: list[str], seen: set[str]) -> None:
+        for target in edges.get(node, []):
+            if target == start:
+                cycles.add(tuple(path))
+            elif target not in seen and target > start:
+                walk(start, target, path + [target], seen | {target})
+
+    for start in sorted(nodes):
+        walk(start, start, [start], {start})
+    return cycles
+
+
+def validate_loops(
+    doc: dict[str, Any],
+    state_set: set[str],
+    transition_map: dict[str, list[str]],
+    errors: list[str],
+) -> set[tuple[str, ...]]:
+    """Check loop declarations and return the cycles they cover."""
+    declared_cycles: set[tuple[str, ...]] = set()
+    loops = as_mapping(doc.get("loops"), "loops", errors)
+    if not loops:
+        return declared_cycles
+
+    missing_loops = sorted(REQUIRED_LOOP_NAMES - set(loops.keys()))
+    if missing_loops:
+        errors.append(f"loops missing: {', '.join(missing_loops)}")
+
+    for name in sorted(set(loops.keys()) & REQUIRED_LOOP_NAMES):
+        loop = as_mapping(loops.get(name), f"loops.{name}", errors)
+        if not loop:
+            continue
+        missing_keys = sorted(REQUIRED_LOOP_KEYS - set(loop.keys()))
+        if missing_keys:
+            errors.append(f"loops.{name} missing keys: {', '.join(missing_keys)}")
+
+        max_iterations = loop.get("max_iterations")
+        if not isinstance(max_iterations, int) or max_iterations < 1:
+            errors.append(f"loops.{name}.max_iterations must be a positive integer")
+        for key in LOOP_TEXT_KEYS:
+            value = loop.get(key)
+            if not isinstance(value, str) or not value:
+                errors.append(f"loops.{name}.{key} must be a non-empty string")
+        if loop.get("escalation_target") not in state_set:
+            errors.append(f"loops.{name}.escalation_target must be a declared state")
+
+        scope = loop.get("scope")
+        if scope not in LOOP_SCOPES:
+            errors.append(f"loops.{name}.scope must be 'graph' or 'supervision'")
+        paths = as_list(loop.get("paths"), f"loops.{name}.paths", errors)
+        if scope == "supervision":
+            if paths:
+                errors.append(f"loops.{name} has supervision scope and must declare no paths")
+            continue
+        if not paths:
+            errors.append(f"loops.{name}.paths must not be empty")
+
+        for position, path in enumerate(paths):
+            label = f"loops.{name}.paths[{position}]"
+            if not isinstance(path, list) or not path:
+                errors.append(f"{label} must be a non-empty list")
+                continue
+            steps = [str(item) for item in path]
+            if len(set(steps)) != len(steps):
+                errors.append(f"{label} must not repeat a state")
+                continue
+            unknown = sorted(set(steps) - state_set)
+            if unknown:
+                errors.append(f"{label} has unknown states: {', '.join(unknown)}")
+                continue
+            closed = True
+            for index, source in enumerate(steps):
+                target = steps[(index + 1) % len(steps)]
+                if target not in transition_map.get(source, []):
+                    errors.append(f"{label} uses an undeclared transition: {source} -> {target}")
+                    closed = False
+            if closed:
+                declared_cycles.add(normalize_cycle(steps))
+
+    return declared_cycles
+
+
+def validate_graph(
+    doc: dict[str, Any],
+    state_set: set[str],
+    transition_map: dict[str, list[str]],
+    declared_cycles: set[tuple[str, ...]],
+    errors: list[str],
+) -> None:
+    graph = as_mapping(doc.get("graph"), "graph", errors)
+    if not graph:
+        return
+
+    terminal_states = as_list(graph.get("terminal_states"), "graph.terminal_states", errors)
+    terminal_set = {str(item) for item in terminal_states}
+    missing_terminals = sorted(REQUIRED_TERMINAL_STATES - terminal_set)
+    if missing_terminals:
+        errors.append(f"graph.terminal_states missing: {', '.join(missing_terminals)}")
+
+    invariants = as_mapping(graph.get("invariants"), "graph.invariants", errors)
+    for invariant in sorted(REQUIRED_GRAPH_INVARIANTS):
+        if invariants.get(invariant) is not True:
+            errors.append(f"graph.invariants.{invariant} must be true")
+
+    edges = as_mapping(graph.get("edges"), "graph.edges", errors)
+    declared_edges: set[tuple[str, str]] = set()
+    for source in sorted(edges):
+        targets = as_mapping(edges.get(source), f"graph.edges.{source}", errors)
+        for target in sorted(targets):
+            declared_edges.add((source, target))
+            edge = as_mapping(targets.get(target), f"graph.edges.{source}.{target}", errors)
+            if not edge:
+                continue
+            for key in sorted(REQUIRED_EDGE_KEYS):
+                value = edge.get(key)
+                if not isinstance(value, str) or not value:
+                    errors.append(
+                        f"graph.edges.{source}.{target}.{key} must be a non-empty string"
+                    )
+
+    workflow_edges = {
+        (source, target)
+        for source, targets in transition_map.items()
+        for target in targets
+    }
+    for source, target in sorted(workflow_edges - declared_edges):
+        errors.append(f"graph.edges missing: {source} -> {target}")
+    for source, target in sorted(declared_edges - workflow_edges):
+        errors.append(f"graph.edges declares an undeclared transition: {source} -> {target}")
+
+    for state in sorted(terminal_set):
+        if transition_map.get(state):
+            errors.append(f"graph terminal state must be a sink: {state}")
+
+    if not state_set or not transition_map:
+        return
+
+    unreachable = sorted(state_set - reachable_from(ENTRY_STATE, transition_map))
+    if unreachable:
+        errors.append(f"states unreachable from {ENTRY_STATE}: {', '.join(unreachable)}")
+
+    backwards = reverse_edges(transition_map)
+    can_finish: set[str] = set()
+    for terminal in sorted(terminal_set):
+        can_finish |= reachable_from(terminal, backwards)
+    stuck = sorted(state_set - can_finish)
+    if stuck:
+        errors.append(f"states with no path to a terminal state: {', '.join(stuck)}")
+
+    for cycle in sorted(find_simple_cycles(transition_map) - declared_cycles):
+        route = " -> ".join(cycle + (cycle[0],))
+        errors.append(f"undeclared cycle in workflow graph: {route}")
+
+
 def validate_config(doc: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
@@ -302,11 +538,17 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
         if not may_not_read:
             errors.append(f"role_isolation.{role}.may_not_read must not be empty")
 
+    state_set: set[str] = set()
+    transition_map: dict[str, list[str]] = {}
+
     workflow = as_mapping(doc.get("workflow"), "workflow", errors)
     if workflow:
         states = as_list(workflow.get("states"), "workflow.states", errors)
         transitions = as_mapping(workflow.get("transitions"), "workflow.transitions", errors)
         state_set = {str(item) for item in states}
+        for source, targets in transitions.items():
+            if isinstance(targets, list):
+                transition_map[str(source)] = [str(target) for target in targets]
         missing_states = sorted(REQUIRED_STATES - state_set)
         if missing_states:
             errors.append(f"workflow.states missing: {', '.join(missing_states)}")
@@ -342,6 +584,28 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
                 errors.append("harness.gate_behavior.missing_artifacts must be INCOMPLETE")
             if gate_behavior.get("invalid_artifacts") != "REWORK":
                 errors.append("harness.gate_behavior.invalid_artifacts must be REWORK")
+
+    declared_cycles = validate_loops(doc, state_set, transition_map, errors)
+    validate_graph(doc, state_set, transition_map, declared_cycles, errors)
+
+    # A loop bound that disagrees with the layer it governs is worse than no
+    # bound at all, because both numbers look authoritative.
+    loops = doc.get("loops")
+    if isinstance(loops, dict):
+        rework_loop = loops.get("rework_loop")
+        if isinstance(rework_loop, dict):
+            if rework_loop.get("max_iterations") != constitution.get("max_rework_count"):
+                errors.append(
+                    "loops.rework_loop.max_iterations must equal "
+                    "constitution.max_rework_count"
+                )
+        checkpoint_loop = loops.get("checkpoint_loop")
+        if isinstance(checkpoint_loop, dict):
+            if checkpoint_loop.get("max_iterations") != long_task.get("max_missed_checkpoints"):
+                errors.append(
+                    "loops.checkpoint_loop.max_iterations must equal "
+                    "long_task.max_missed_checkpoints"
+                )
 
     return errors
 
