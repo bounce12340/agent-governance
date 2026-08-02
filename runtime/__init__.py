@@ -27,6 +27,12 @@ from .executor import (
 from .guards import GUARDS
 from .roles import IsolationError, RoleSession
 from .session import GovernanceSession
+from .supervision import (
+    CheckpointStatus,
+    CheckpointSupervisor,
+    SupervisionError,
+    SupervisionResult,
+)
 
 __all__ = [
     "AdapterError",
@@ -34,6 +40,8 @@ __all__ = [
     "AnthropicMessagesAdapter",
     "Case",
     "CaseRunner",
+    "CheckpointStatus",
+    "CheckpointSupervisor",
     "ExecutionError",
     "GUARDS",
     "GovernanceSession",
@@ -48,5 +56,7 @@ __all__ = [
     "ScriptedAdapter",
     "StepResult",
     "StubAdapter",
+    "SupervisionError",
+    "SupervisionResult",
     "build_adapter",
 ]

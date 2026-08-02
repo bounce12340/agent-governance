@@ -92,7 +92,8 @@
         "evidence_bundle",
         "output_snapshot",
         "failure_mode_notes",
-        "rework_diff_note"
+        "rework_diff_note",
+        "progress_summary"
       ]
     },
     "judiciary": {

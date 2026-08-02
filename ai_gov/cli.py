@@ -22,6 +22,11 @@ from runtime.case import Case  # noqa: E402
 from runtime.executor import CaseRunner, RunStatus  # noqa: E402
 from runtime.roles import IsolationError  # noqa: E402
 from runtime.session import DEFAULT_CONFIG, GovernanceSession  # noqa: E402
+from runtime.supervision import (  # noqa: E402
+    CheckpointStatus,
+    CheckpointSupervisor,
+    SupervisionError,
+)
 
 from .store import Store, StoreError  # noqa: E402
 
@@ -36,6 +41,14 @@ EXIT_ESCALATED = 4
 VERDICT_EXIT = {
     "PASSED": EXIT_OK,
     "REJECTED": EXIT_REJECTED,
+}
+
+SUPERVISION_EXIT = {
+    CheckpointStatus.DISABLED: EXIT_OK,
+    CheckpointStatus.HEALTHY: EXIT_OK,
+    CheckpointStatus.OVERDUE: EXIT_BLOCKED,
+    CheckpointStatus.STAGNATED: EXIT_ESCALATED,
+    CheckpointStatus.ESCALATED: EXIT_ESCALATED,
 }
 
 
@@ -100,9 +113,51 @@ def cmd_case_start(args, session: GovernanceSession, store: Store) -> int:
         },
     )
     case.facts["case_name"] = args.name
+    # Nothing can be late before the clock starts.
+    CheckpointSupervisor(session.doc).start(case, args.now)
     store.save_case(case)
     print(f"started {case.case_id} under {law['law_id']}: {args.name}")
     return EXIT_OK
+
+
+def cmd_case_checkpoint(args, session: GovernanceSession, store: Store) -> int:
+    case = store.load_case(args.case)
+    supervisor = CheckpointSupervisor(session.doc)
+    summary = {
+        "completed": args.completed,
+        "blocked": args.blocked,
+        "next_step": args.next_step,
+        "eta": args.eta,
+    }
+    result = supervisor.record(case, summary, args.now)
+    apply_as(session, "executive", case, {"artifacts": {"progress_summary": json.dumps(summary)}})
+    store.save_case(case)
+
+    print(f"{case.case_id}: {result.status.value} — {result.note}")
+    print(f"  checkpoints recorded: {len(case.checkpoints)}")
+    if result.status is CheckpointStatus.STAGNATED:
+        print("  a repeated report is not progress; the next review will escalate")
+    return SUPERVISION_EXIT[result.status]
+
+
+def cmd_case_supervise(args, session: GovernanceSession, store: Store) -> int:
+    case = store.load_case(args.case)
+    supervisor = CheckpointSupervisor(session.doc)
+    result = supervisor.review(case, args.now)
+
+    print(f"{case.case_id}: {result.status.value} — {result.note}")
+    if case.last_checkpoint_at is not None:
+        deadline = supervisor.deadline(case)
+        print(f"  last checkpoint: {case.last_checkpoint_at:.0f}")
+        print(f"  next due by:     {deadline:.0f}")
+    print(f"  missed: {case.missed_checkpoints}/{supervisor.max_missed}")
+
+    if result.status is CheckpointStatus.ESCALATED and args.escalate:
+        written = supervisor.escalate(case, session, result.note)
+        print(f"  escalated with executive authority, wrote {', '.join(written)}")
+        print(f"  the case will route toward {supervisor.escalation_target} on its next run")
+    store.save_case(case)
+    return SUPERVISION_EXIT[result.status]
 
 
 def cmd_case_list(args, session: GovernanceSession, store: Store) -> int:
@@ -238,6 +293,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-gov", description="Governed multi-agent workflow")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="governance config path")
     parser.add_argument("--store", default=None, help="record directory (default .ai-gov)")
+    parser.add_argument(
+        "--now",
+        type=float,
+        default=None,
+        help="override the clock, epoch seconds (for replay and testing)",
+    )
     subs = parser.add_subparsers(dest="group", required=True)
 
     law = subs.add_parser("law", help="legislative commands").add_subparsers(
@@ -265,6 +326,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = case.add_parser("list", help="list cases")
     listing.set_defaults(handler=cmd_case_list)
+
+    checkpoint = case.add_parser("checkpoint", help="report progress on a long-running case")
+    checkpoint.add_argument("--case", required=True)
+    checkpoint.add_argument("--completed", required=True)
+    checkpoint.add_argument("--blocked", required=True)
+    checkpoint.add_argument("--next-step", required=True)
+    checkpoint.add_argument("--eta", required=True)
+    checkpoint.set_defaults(handler=cmd_case_checkpoint)
+
+    supervise = case.add_parser("supervise", help="check whether a case is still reporting")
+    supervise.add_argument("--case", required=True)
+    supervise.add_argument(
+        "--escalate",
+        action="store_true",
+        help="if over the miss limit, raise the clarification request",
+    )
+    supervise.set_defaults(handler=cmd_case_supervise)
 
     harness = subs.add_parser("harness", help="evidence commands").add_subparsers(
         dest="command", required=True
@@ -314,6 +392,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_USAGE
     except IsolationError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except SupervisionError as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return EXIT_USAGE
     except ValueError as exc:

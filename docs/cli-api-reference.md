@@ -56,7 +56,20 @@ ai-gov harness submit \
 inline text. Both are repeatable. The command reports which required artifacts
 are still missing.
 
-#### 4. Request clarification
+#### 4. Report and supervise progress
+
+```bash
+ai-gov case checkpoint --case CASE-001 \
+  --completed "auth flow done" --blocked "none" \
+  --next-step "storage layer" --eta "2 days"
+
+ai-gov case supervise --case CASE-001 [--escalate]
+```
+
+Every field is required — a report missing `blocked` or `eta` is refused. See
+[Long-task supervision](long-task-supervision.md).
+
+#### 5. Request clarification
 
 ```bash
 ai-gov law clarify \
@@ -64,7 +77,7 @@ ai-gov law clarify \
   --reason "The acceptance criteria are ambiguous"
 ```
 
-#### 5. Run verification
+#### 6. Run verification
 
 ```bash
 ai-gov judge run --case CASE-001 --unresolved 0
@@ -80,7 +93,7 @@ a success claimed without evidence, which the constitution forbids.
 `--with-models` lets the bound judiciary model decide. The other flags record a
 human verdict. Both are written with judiciary authority and no more.
 
-#### 6. Request amendment
+#### 7. Request amendment
 
 ```bash
 ai-gov judge amend \
@@ -88,7 +101,7 @@ ai-gov judge amend \
   --reason "The law needs a clearer crash threshold"
 ```
 
-#### 7. Show verdict
+#### 8. Show verdict
 
 ```bash
 ai-gov judge show CASE-001
@@ -107,9 +120,9 @@ prose.
 | --- | --- |
 | `0` | command succeeded; for `judge run`, the case reached `PASSED` |
 | `1` | usage error, unknown record, or a refused write |
-| `2` | the case is blocked — typically incomplete harness evidence |
+| `2` | the case is blocked — incomplete harness evidence, or an overdue checkpoint |
 | `3` | the case reached `REJECTED` |
-| `4` | a loop stagnated and escalated |
+| `4` | a loop stagnated and escalated, or checkpoints passed the miss ceiling |
 
 ### Writes are bound by role authority
 
@@ -258,7 +271,20 @@ ai-gov harness submit \
 `--artifact NAME=PATH` 附上檔案內容，`--note NAME=TEXT` 附上行內文字，
 兩者都可重複使用。指令會回報還缺哪些必要證據。
 
-#### 4. 提出澄清請求
+#### 4. 回報與監督進度
+
+```bash
+ai-gov case checkpoint --case CASE-001 \
+  --completed "auth flow done" --blocked "none" \
+  --next-step "storage layer" --eta "2 days"
+
+ai-gov case supervise --case CASE-001 [--escalate]
+```
+
+每個欄位都是必填 —— 少了 `blocked` 或 `eta` 的回報會被拒絕。
+詳見[長任務監督](long-task-supervision.md)。
+
+#### 5. 提出澄清請求
 
 ```bash
 ai-gov law clarify \
@@ -266,7 +292,7 @@ ai-gov law clarify \
   --reason "The acceptance criteria are ambiguous"
 ```
 
-#### 5. 執行驗證
+#### 6. 執行驗證
 
 ```bash
 ai-gov judge run --case CASE-001 --unresolved 0
@@ -283,7 +309,7 @@ ai-gov judge run --case CASE-001 --with-models
 `--with-models` 讓綁定的司法權模型下判斷，其他旗標則記錄人工判決。
 兩者都以司法權的權限寫入，不會更多。
 
-#### 6. 提出修法請求
+#### 7. 提出修法請求
 
 ```bash
 ai-gov judge amend \
@@ -291,7 +317,7 @@ ai-gov judge amend \
   --reason "The law needs a clearer crash threshold"
 ```
 
-#### 7. 顯示判決
+#### 8. 顯示判決
 
 ```bash
 ai-gov judge show CASE-001
@@ -309,9 +335,9 @@ ai-gov case list
 | --- | --- |
 | `0` | 指令成功；對 `judge run` 而言代表案件走到 `PASSED` |
 | `1` | 用法錯誤、查無紀錄，或寫入被拒絕 |
-| `2` | 案件被擋住 —— 通常是 harness 證據不完整 |
+| `2` | 案件被擋住 —— harness 證據不完整，或 checkpoint 逾期 |
 | `3` | 案件走到 `REJECTED` |
-| `4` | 某個迴圈停滯並升級 |
+| `4` | 某個迴圈停滯並升級，或 checkpoint 漏報超過上限 |
 
 ### 寫入受角色權限約束
 
