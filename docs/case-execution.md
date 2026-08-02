@@ -1,0 +1,165 @@
+# Case Execution / 案件執行
+
+## English
+
+### The config is the program
+
+`runtime/executor.py` hardcodes no states, no edges, and no ordering. States,
+guarded edges, evidence requirements, loop bounds and terminal states are all
+read from `config/governance.yaml`, which the validator has already checked.
+Changing the governance model is a config change, not a code change.
+
+```python
+from runtime import Case, CaseRunner
+
+runner = CaseRunner(config_document)
+case = Case("CASE-001", facts={...}, artifacts={...})
+result = runner.run(case)
+
+print(result.status.value)  # TERMINAL
+print(case.trail())         # NEW -> LEGISLATIVE -> ... -> PASSED
+```
+
+### Facts and artifacts are different things
+
+A case carries `facts`, which guards read to decide routing, and `artifacts`,
+which are the harness evidence. They are kept apart on purpose: evidence is
+what the judiciary reviews, not what the router branches on. Mixing them would
+let a case route itself by submitting the right paperwork.
+
+`history` records every hop with the guard that opened it and the evidence that
+crossed with it, so a verdict can be reconstructed from the trail alone.
+
+### One step
+
+1. If the state is terminal, stop.
+2. At `HARNESS_SUBMITTED`, apply the harness gate first. Missing artifacts
+   produce the verdict named in `harness.gate_behavior.missing_artifacts`, and
+   the case does not move.
+3. Evaluate every outgoing edge's guard.
+4. Zero satisfied means the case is blocked — legitimate, and reported rather
+   than crashed. More than one is refused outright.
+5. Check the edge's `required_evidence` is present.
+6. Apply loop accounting.
+7. Move, and record the hop.
+
+### Guards live in code, names live in config
+
+`config` names a guard; `runtime/guards.py` supplies its meaning. The validator
+checks every name in `graph.edges` has an implementation, so an edge nothing can
+ever take fails validation instead of surfacing as a case that mysteriously
+stalls.
+
+Fan-out guards are written to be exclusive by construction — each branch
+excludes the conditions of the branches above it. At `JUDICIARY` the order is
+red line, then defective law, then unproven items, then passed. A red line
+outranks every other verdict.
+
+Construction is an argument, so the executor still checks: two satisfied guards
+on one fan-out raise `NondeterministicRouting`. A test sweeps every fan-out
+against a matrix of fact combinations and asserts at most one door ever opens.
+
+### Loop accounting (English)
+
+The first edge of a declared path is that loop's entry edge, so taking it
+counts as one iteration. `clarification_loop` declares two paths that share a
+first edge, so both feed one counter.
+
+Each entry also appends the loop's `per_iteration_artifact` to a list. If two
+consecutive entries carry the same value, the loop has stagnated and escalates
+immediately, without waiting for the iteration budget. Counting alone limits
+how long a case spins; comparing artifacts is what notices it spinning in
+place.
+
+### Escalation cannot teleport
+
+A loop's `escalation_target` is taken only if it is reachable in one legal
+transition from the current state. `rework_loop` escalates to `REJECTED`, and
+`REWORK -> REJECTED` is a declared edge, so the case moves.
+`clarification_loop` escalates to `LAW_AMENDMENT_REQUEST`, which has no edge
+from `LAW_CLARIFICATION_REQUEST` — so the run halts with status `ESCALATED` and
+names the target instead of jumping to it.
+
+Jumping would violate the same graph invariants the validator enforces. An
+escalation that the graph does not permit is a supervision signal for a human,
+not a transition.
+
+## 繁體中文
+
+### 設定檔就是程式
+
+`runtime/executor.py` 沒有寫死任何狀態、任何邊、任何順序。
+狀態、帶 guard 的邊、證據需求、迴圈上限與終局狀態，
+全部從 `config/governance.yaml` 讀取，而那份設定已經先被驗證器檢查過。
+改治理模型是改設定，不是改程式。
+
+```python
+from runtime import Case, CaseRunner
+
+runner = CaseRunner(config_document)
+case = Case("CASE-001", facts={...}, artifacts={...})
+result = runner.run(case)
+
+print(result.status.value)  # TERMINAL
+print(case.trail())         # NEW -> LEGISLATIVE -> ... -> PASSED
+```
+
+### facts 與 artifacts 是兩回事
+
+案件同時帶著 `facts`（guard 讀取它來決定路由）與 `artifacts`（harness 證據）。
+兩者刻意分開：證據是給司法權審查的東西，不是路由的分支條件。
+把兩者混在一起，等於讓案件可以靠「交對文件」來決定自己往哪走。
+
+`history` 會記錄每一跳、開啟這一跳的 guard，以及隨之交付的證據，
+所以光看這條軌跡就能重建整個判決過程。
+
+### 一個 step 做什麼
+
+1. 如果是終局狀態就停止。
+2. 在 `HARNESS_SUBMITTED` 先套用 harness gate。
+   證據缺漏會產生 `harness.gate_behavior.missing_artifacts` 所指定的結果，
+   案件不會前進。
+3. 評估所有出邊的 guard。
+4. 零個成立代表案件被擋住 —— 這是合法狀況，會被回報而不是丟例外。
+   超過一個成立則直接拒絕。
+5. 檢查該條邊的 `required_evidence` 是否存在。
+6. 進行迴圈計數。
+7. 前進，並記錄這一跳。
+
+### guard 的實作在程式裡，名稱在設定裡
+
+設定檔負責命名 guard，`runtime/guards.py` 負責給它意義。
+驗證器會檢查 `graph.edges` 裡的每個名稱都有實作，
+所以一條永遠走不到的邊會在驗證階段失敗，
+而不是變成一個莫名其妙卡住的案件。
+
+Fan-out 的 guard 以「互相排除」的方式撰寫 ——
+每個分支都排除了它上面各分支的條件。
+在 `JUDICIARY` 的順序是：紅線、法律瑕疵、條目未證明、通過。
+紅線的優先序高於其他所有判決。
+
+「設計上互斥」只是一種論證，所以執行器仍然會實際檢查：
+同一個 fan-out 有兩個 guard 成立就會拋出 `NondeterministicRouting`。
+有一個測試會用一整組 fact 組合掃過每一個 fan-out，
+斷言任何情況下最多只有一扇門是開的。
+
+### 迴圈計數（繁體中文）
+
+宣告路徑的第一條邊就是該迴圈的進入邊，走過它就算一次迭代。
+`clarification_loop` 宣告的兩條路徑共用同一條第一邊，所以共用一個計數器。
+
+每次進入也會把該迴圈的 `per_iteration_artifact` 附加到一個清單。
+如果連續兩次進入帶的是相同的值，就判定為停滯並立即升級，
+不必等迭代額度用完。
+數次數只能限制案件可以繞多久，比對證據才能發現它在原地打轉。
+
+### 升級不能瞬間移動
+
+迴圈的 `escalation_target` 只有在「從目前狀態出發、一步合法轉換可達」時才會執行。
+`rework_loop` 升級到 `REJECTED`，而 `REWORK -> REJECTED` 是宣告過的邊，所以案件會移動。
+`clarification_loop` 升級到 `LAW_AMENDMENT_REQUEST`，
+但從 `LAW_CLARIFICATION_REQUEST` 並沒有這條邊 ——
+因此執行會以 `ESCALATED` 狀態停下並指出目標，而不是直接跳過去。
+
+直接跳過去會違反驗證器正在強制的那些圖不變式。
+圖不允許的升級，是給人看的監督訊號，不是一次狀態轉換。

@@ -19,6 +19,11 @@ All notable changes to this project will be documented here.
   Anthropic messages interfaces plus an offline stub
 - Role isolation is now enforced across models: no two roles may resolve to the
   same interface, endpoint and model
+- Case execution layer: a `CaseRunner` that walks the declared graph, applies
+  the harness gate, counts loop iterations, detects stagnation, and refuses
+  nondeterministic routing when two guards on one fan-out are satisfied
+- Guard implementations registry, cross-checked by the validator so an edge
+  naming a guard nobody wrote fails validation
 - Offline runtime test suite and a third CI job that runs it without secrets
 - `CLAUDE.md` guidance for Claude Code
 
