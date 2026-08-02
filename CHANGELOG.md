@@ -28,6 +28,9 @@ All notable changes to this project will be documented here.
   `RoleAgency` turns that role's reply into the case's facts and artifacts
 - Write authority: `role_isolation.<role>.may_write` complements `may_read`,
   with disjoint ownership enforced so no role can write another's verdict
+- `ai-gov` CLI implementing the documented command surface, with a flat-file
+  record store, verdict-bearing exit codes, and writes bound by the acting
+  role's authority
 - Offline runtime test suite and a third CI job that runs it without secrets
 - `CLAUDE.md` guidance for Claude Code
 

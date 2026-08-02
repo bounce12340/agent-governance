@@ -43,6 +43,31 @@ class Case:
         )
         self.state = target
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "case_id": self.case_id,
+            "state": self.state,
+            "facts": self.facts,
+            "artifacts": self.artifacts,
+            "invalid_artifacts": sorted(self.invalid_artifacts),
+            "history": self.history,
+            "loop_iterations": self.loop_iterations,
+            "loop_evidence": self.loop_evidence,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Case":
+        return cls(
+            case_id=data["case_id"],
+            state=data.get("state", ENTRY_STATE),
+            facts=data.get("facts") or {},
+            artifacts=data.get("artifacts") or {},
+            invalid_artifacts=set(data.get("invalid_artifacts") or []),
+            history=data.get("history") or [],
+            loop_iterations=data.get("loop_iterations") or {},
+            loop_evidence=data.get("loop_evidence") or {},
+        )
+
     def trail(self) -> str:
         """The route taken, for a verdict or a post-mortem."""
         if not self.history:
