@@ -1,8 +1,14 @@
 """The ai-gov command line.
 
-Every write goes through the acting role's `may_write` allowlist. An operator
-at a terminal is standing in for a role, and should not be able to do what that
-role could not — otherwise the CLI is a hole straight through role isolation.
+Every write on behalf of a role goes through that role's `may_write` allowlist.
+An operator at a terminal is standing in for a role, and should not be able to
+do what that role could not — otherwise the CLI is a hole straight through role
+isolation.
+
+The one exception is intake. `NEW` declares no acting role, and `user_request`
+is deliberately in no role's `may_write`, because the request comes from the
+caller rather than from anyone inside the system. `case start` therefore seeds
+it directly. Everything after that belongs to a role.
 """
 
 from __future__ import annotations

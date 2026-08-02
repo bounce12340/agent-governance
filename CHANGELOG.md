@@ -28,6 +28,9 @@ All notable changes to this project will be documented here.
   `RoleAgency` turns that role's reply into the case's facts and artifacts
 - Write authority: `role_isolation.<role>.may_write` complements `may_read`,
   with disjoint ownership enforced so no role can write another's verdict
+- Every declared loop bound is enforced, not just the rework loop's; the graph
+  routes the overflow where it can express it, and the loop layer halts the run
+  where it cannot
 - Artifact validity: `harness.artifact_checks` declares mechanical checks per
   artifact, and the gate marks what fails so `gate_behavior.invalid_artifacts`
   is reachable for the first time

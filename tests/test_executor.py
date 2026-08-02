@@ -219,6 +219,81 @@ class LoopBoundTest(unittest.TestCase):
         self.assertEqual(case.state, "REWORK")
 
 
+class LoopBudgetTest(unittest.TestCase):
+    """Fresh evidence every pass defeats stagnation detection.
+
+    That is precisely when the declared bound has to do the work, so each loop
+    is driven with a changing artifact to prove counting alone stops it.
+    """
+
+    def setUp(self) -> None:
+        self.runner = CaseRunner(copy.deepcopy(CONFIG))
+
+    def drive(self, state: str, artifact: str, **facts) -> tuple[Case, object]:
+        case = clean_case(**facts)
+        case.state = state
+        result = None
+        for index in range(20):
+            case.artifacts[artifact] = f"fresh-{index}"
+            result = self.runner.step(case)
+            if result.status is not RunStatus.MOVED:
+                break
+        return case, result
+
+    def test_clarification_loop_stops_at_its_declared_bound(self) -> None:
+        bound = CONFIG["loops"]["clarification_loop"]["max_iterations"]
+        case, result = self.drive("EXECUTIVE", "ambiguity_notes", open_ambiguity_items=1)
+        self.assertEqual(result.status, RunStatus.ESCALATED)
+        self.assertEqual(case.iterations("clarification_loop"), bound + 1)
+        self.assertIn(f"exceeded its bound of {bound}", result.note)
+
+    def test_amendment_loop_stops_at_its_declared_bound(self) -> None:
+        bound = CONFIG["loops"]["amendment_loop"]["max_iterations"]
+        case, result = self.drive("JUDICIARY", "amendment_reason", defective_law_items=1)
+        self.assertEqual(result.status, RunStatus.ESCALATED)
+        self.assertEqual(case.iterations("amendment_loop"), bound + 1)
+
+    def test_no_loop_outruns_its_bound(self) -> None:
+        """A sweep, so a loop added later cannot quietly go unbounded."""
+        drives = {
+            "clarification_loop": ("EXECUTIVE", "ambiguity_notes", {"open_ambiguity_items": 1}),
+            "amendment_loop": ("JUDICIARY", "amendment_reason", {"defective_law_items": 1}),
+            "rework_loop": ("JUDICIARY", "rework_diff_note", {"unresolved_law_items": 1}),
+        }
+        graph_loops = {
+            name for name, loop in CONFIG["loops"].items() if loop.get("scope") == "graph"
+        }
+        self.assertEqual(set(drives), graph_loops, "a declared graph loop has no drive here")
+
+        for name, (state, artifact, facts) in drives.items():
+            with self.subTest(loop=name):
+                case, result = self.drive(state, artifact, **facts)
+                bound = CONFIG["loops"][name]["max_iterations"]
+                self.assertLessEqual(case.iterations(name), bound + 1)
+                self.assertIn(
+                    result.status, {RunStatus.ESCALATED, RunStatus.TERMINAL, RunStatus.BLOCKED}
+                )
+
+    def test_the_graph_routes_the_overflow_when_it_can(self) -> None:
+        """rework's escalation target has a declared edge, so the guards take it."""
+        case, _ = self.drive("JUDICIARY", "rework_diff_note", unresolved_law_items=1)
+        self.assertEqual(case.state, "REJECTED")
+        # Through REWORK on a declared guard, not jumped there by the loop layer.
+        self.assertEqual([h["to"] for h in case.history][-2:], ["REWORK", "REJECTED"])
+        self.assertEqual(case.history[-1]["guard"], "rework_budget_exhausted")
+        self.assertNotIn("escalation", case.history[-1])
+
+    def test_an_escalation_hop_records_why_not_just_which_guard(self) -> None:
+        case = clean_case(open_ambiguity_items=1)
+        case.state = "EXECUTIVE"
+        case.artifacts["ambiguity_notes"] = "same question"
+        self.runner.step(case)
+        case.state = "EXECUTIVE"
+        self.runner.step(case)
+        self.assertIn("escalation", case.history[-1])
+        self.assertIn("stagnated", case.history[-1]["escalation"])
+
+
 class StagnationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.runner = CaseRunner(copy.deepcopy(CONFIG))

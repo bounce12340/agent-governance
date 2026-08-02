@@ -28,7 +28,10 @@ what the judiciary reviews, not what the router branches on. Mixing them would
 let a case route itself by submitting the right paperwork.
 
 `history` records every hop with the guard that opened it and the evidence that
-crossed with it, so a verdict can be reconstructed from the trail alone.
+crossed with it, so a verdict can be reconstructed from the trail alone. A hop
+taken because a loop gave out also carries an `escalation` note saying so —
+recording only the guard would put a false reason in the trail, since that
+guard was never the reason.
 
 ### One step
 
@@ -192,6 +195,8 @@ print(case.trail())         # NEW -> LEGISLATIVE -> ... -> PASSED
 
 `history` 會記錄每一跳、開啟這一跳的 guard，以及隨之交付的證據，
 所以光看這條軌跡就能重建整個判決過程。
+因為迴圈用盡而發生的那一跳，還會多帶一個 `escalation` 註記說明原因 ——
+只記 guard 會在軌跡裡留下一個假的理由，因為那個 guard 根本不是原因。
 
 ### 一個 step 做什麼
 
