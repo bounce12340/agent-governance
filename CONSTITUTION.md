@@ -12,6 +12,8 @@ These are global rules that apply to every law, case, and judgment.
 - No red line may be overridden by a lower-level law.
 - No role may judge its own original law without isolation.
 - No two roles may run on the same model.
+- No two roles may share write authority over the same key.
+- No role may write the verdict on its own work.
 - No credential may be stored in configuration.
 
 ### Structural rules
@@ -42,6 +44,8 @@ These are global rules that apply to every law, case, and judgment.
 - 任何下位法律都不能覆蓋上位紅線。
 - 任何角色都不能在沒有隔離的情況下自己立法自己審。
 - 任何兩個角色都不能使用同一個模型。
+- 任何兩個角色都不能對同一個欄位共享寫入權。
+- 任何角色都不能寫下對自己工作的判決。
 - 任何金鑰都不能寫進設定檔。
 
 ### 結構規則

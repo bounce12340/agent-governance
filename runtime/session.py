@@ -45,6 +45,7 @@ class GovernanceSession:
                 prompt_scope=role_cfg.get("prompt_scope", ""),
                 may_read=role_cfg.get("may_read") or [],
                 may_not_read=role_cfg.get("may_not_read") or [],
+                may_write=role_cfg.get("may_write") or [],
             )
 
     @classmethod

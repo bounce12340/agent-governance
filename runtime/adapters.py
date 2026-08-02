@@ -167,6 +167,30 @@ class StubAdapter(ModelAdapter):
         return f"[{self.name}] system={len(system)} prompt={len(prompt)}"
 
 
+class ScriptedAdapter(ModelAdapter):
+    """Replays queued replies instead of calling a model.
+
+    Deliberately absent from INTERFACES: this is a test double, not something a
+    config should be able to put in a governance seat.
+    """
+
+    interface = "scripted"
+
+    def __init__(self, name: str, replies: list[str], model: str = "scripted") -> None:
+        super().__init__(name=name, model=model)
+        self.replies = list(replies)
+        self.asked: list[tuple[str, str]] = []
+
+    def build_request(self, system: str, prompt: str) -> tuple[str, dict[str, str], bytes]:
+        raise AdapterError("the scripted adapter performs no network I/O")
+
+    def complete(self, system: str, prompt: str) -> str:
+        self.asked.append((system, prompt))
+        if not self.replies:
+            raise AdapterError(f"scripted adapter {self.name} ran out of replies")
+        return self.replies.pop(0)
+
+
 INTERFACES: dict[str, type[ModelAdapter]] = {
     OpenAIChatCompletionsAdapter.interface: OpenAIChatCompletionsAdapter,
     AnthropicMessagesAdapter.interface: AnthropicMessagesAdapter,

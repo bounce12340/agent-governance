@@ -588,6 +588,61 @@ def validate_role_providers(
                 )
 
 
+def validate_write_authority(doc: dict[str, Any], errors: list[str]) -> None:
+    """No two roles may write the same key.
+
+    Shared write authority is shared authorship. If both the legislative and
+    the judiciary role could set `red_line_violated`, the verdict would have
+    two authors and the audit trail would not say which one decided.
+    """
+    role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
+    if not role_isolation:
+        return
+
+    owner: dict[str, str] = {}
+    for role in sorted(ROLE_NAMES):
+        role_cfg = role_isolation.get(role)
+        if not isinstance(role_cfg, dict):
+            continue
+        may_write = role_cfg.get("may_write")
+        if not isinstance(may_write, list):
+            continue
+        for key in may_write:
+            name = str(key)
+            if name in owner:
+                errors.append(
+                    f"role_isolation.{role}.may_write claims '{name}', already owned by "
+                    f"{owner[name]}"
+                )
+                continue
+            owner[name] = role
+
+
+def validate_state_roles(doc: dict[str, Any], state_set: set[str], errors: list[str]) -> None:
+    """Every state declares which role acts in it, or explicitly declares none."""
+    state_roles = doc.get("state_roles")
+    if not isinstance(state_roles, dict):
+        errors.append("state_roles must be a mapping")
+        return
+
+    terminal_states = set((doc.get("graph") or {}).get("terminal_states") or [])
+    missing = sorted(state_set - set(state_roles.keys()))
+    if missing:
+        errors.append(f"state_roles missing states: {', '.join(missing)}")
+    unknown = sorted(set(state_roles.keys()) - state_set)
+    if unknown:
+        errors.append(f"state_roles has undeclared states: {', '.join(unknown)}")
+
+    for state in sorted(set(state_roles.keys()) & state_set):
+        role = state_roles[state]
+        if role is None:
+            continue
+        if role not in ROLE_NAMES:
+            errors.append(f"state_roles.{state} is not a declared role: {role}")
+        elif state in terminal_states:
+            errors.append(f"state_roles.{state} is terminal and must have no acting role")
+
+
 def validate_config(doc: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
@@ -670,10 +725,15 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
         may_not_read = as_list(
             role_cfg.get("may_not_read"), f"role_isolation.{role}.may_not_read", errors
         )
+        may_write = as_list(
+            role_cfg.get("may_write"), f"role_isolation.{role}.may_write", errors
+        )
         if not may_read:
             errors.append(f"role_isolation.{role}.may_read must not be empty")
         if not may_not_read:
             errors.append(f"role_isolation.{role}.may_not_read must not be empty")
+        if not may_write:
+            errors.append(f"role_isolation.{role}.may_write must not be empty")
 
     state_set: set[str] = set()
     transition_map: dict[str, list[str]] = {}
@@ -724,6 +784,8 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
 
     identities = validate_providers(doc, errors)
     validate_role_providers(doc, identities, errors)
+    validate_write_authority(doc, errors)
+    validate_state_roles(doc, state_set, errors)
 
     declared_cycles = validate_loops(doc, state_set, transition_map, errors)
     validate_graph(doc, state_set, transition_map, declared_cycles, errors)

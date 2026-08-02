@@ -46,7 +46,8 @@ CI (`.github/workflows/ci.yml`) runs three jobs on push/PR to `main`: markdownli
 with no secrets and no network — the `stub` interface exists so it can.
 
 `TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
-`tests/test_runtime.py` and `tests/test_executor.py`, which are the automated suite.
+`tests/test_runtime.py`, `tests/test_executor.py` and `tests/test_agency.py`, which are the
+automated suite.
 
 ## Architecture: where the governance model actually lives
 
@@ -103,6 +104,10 @@ than a literal key, that non-`stub` interfaces carry an `http(s)://` `base_url`,
 two roles resolve to the same `(interface, base_url, model)` triple — that last one is what
 turns `model: separate` from a claim into a constraint, so **at least two distinct model
 configurations are required** for any valid config.
+
+It also enforces that `role_isolation.<role>.may_write` sets are disjoint across roles, and
+that `state_roles` covers every state with either a declared role or an explicit `null`
+(terminal states must be `null`).
 
 These mirror the constitution's structural rules — harness before judgment, capped rework,
 role isolation, two-way feedback channels. Loosening one in the config without changing

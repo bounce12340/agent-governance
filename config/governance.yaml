@@ -63,6 +63,10 @@ role_isolation:
     may_not_read:
       - executive_private_notes
       - judiciary_verdict_details
+    may_write:
+      - law
+      - acceptance_criteria
+      - clarification_requires_amendment
   executive:
     model: separate
     provider: openai_primary
@@ -73,6 +77,14 @@ role_isolation:
       - constitution
     may_not_read:
       - judiciary_private_deliberation
+    may_write:
+      - open_ambiguity_items
+      - ambiguity_notes
+      - test_plan
+      - evidence_bundle
+      - output_snapshot
+      - failure_mode_notes
+      - rework_diff_note
   judiciary:
     model: separate
     provider: openai_compatible_local
@@ -85,6 +97,11 @@ role_isolation:
     may_not_read:
       - legislative_original_reasoning
       - executive_private_notes
+    may_write:
+      - unresolved_law_items
+      - defective_law_items
+      - red_line_violated
+      - amendment_reason
 
 workflow:
   states:
@@ -166,6 +183,22 @@ loops:
     per_iteration_artifact: progress_summary
     stagnation_rule: identical_progress_summary_twice
     escalation_target: LAW_CLARIFICATION_REQUEST
+
+# Which role acts in which state. null means no role acts: NEW is intake,
+# HARNESS_SUBMITTED is a gate rather than a work state, and terminal states are
+# over. A state with no owner cannot produce evidence, so a case blocked there
+# needs a caller, not another model call.
+state_roles:
+  NEW: null
+  LEGISLATIVE: legislative
+  EXECUTIVE: executive
+  HARNESS_SUBMITTED: null
+  JUDICIARY: judiciary
+  REWORK: executive
+  LAW_AMENDMENT_REQUEST: judiciary
+  LAW_CLARIFICATION_REQUEST: legislative
+  PASSED: null
+  REJECTED: null
 
 # graph.edges must mirror workflow.transitions exactly, one entry per edge.
 graph:

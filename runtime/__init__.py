@@ -11,9 +11,11 @@ from .adapters import (
     MissingCredential,
     ModelAdapter,
     OpenAIChatCompletionsAdapter,
+    ScriptedAdapter,
     StubAdapter,
     build_adapter,
 )
+from .agency import AgencyError, RoleAgency
 from .case import Case
 from .executor import (
     CaseRunner,
@@ -28,6 +30,7 @@ from .session import GovernanceSession
 
 __all__ = [
     "AdapterError",
+    "AgencyError",
     "AnthropicMessagesAdapter",
     "Case",
     "CaseRunner",
@@ -39,8 +42,10 @@ __all__ = [
     "ModelAdapter",
     "NondeterministicRouting",
     "OpenAIChatCompletionsAdapter",
+    "RoleAgency",
     "RoleSession",
     "RunStatus",
+    "ScriptedAdapter",
     "StepResult",
     "StubAdapter",
     "build_adapter",
