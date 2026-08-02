@@ -138,6 +138,10 @@ KNOWN_GUARDS = {
     "clarification_resolved_in_place",
 }
 
+# Artifact checks the harness gate can run. Keep in sync with
+# runtime/checks.py:CHECKS.
+KNOWN_ARTIFACT_CHECKS = {"non_empty", "not_placeholder", "contains_a_number"}
+
 ENTRY_STATE = "NEW"
 
 
@@ -781,6 +785,29 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
                 errors.append("harness.gate_behavior.missing_artifacts must be INCOMPLETE")
             if gate_behavior.get("invalid_artifacts") != "REWORK":
                 errors.append("harness.gate_behavior.invalid_artifacts must be REWORK")
+
+        # An artifact with no checks is one the gate cannot tell apart from an
+        # empty string, which is what gate_behavior.invalid_artifacts is for.
+        artifact_checks = as_mapping(
+            harness.get("artifact_checks"), "harness.artifact_checks", errors
+        )
+        uncovered = sorted(artifact_set - set(artifact_checks.keys()))
+        if uncovered:
+            errors.append(
+                f"harness.artifact_checks missing entries for: {', '.join(uncovered)}"
+            )
+        for name in sorted(artifact_checks):
+            checks = as_list(
+                artifact_checks.get(name), f"harness.artifact_checks.{name}", errors
+            )
+            if not checks:
+                errors.append(f"harness.artifact_checks.{name} must not be empty")
+            unknown = sorted({str(item) for item in checks} - KNOWN_ARTIFACT_CHECKS)
+            if unknown:
+                errors.append(
+                    f"harness.artifact_checks.{name} has no implementation for: "
+                    f"{', '.join(unknown)}"
+                )
 
     identities = validate_providers(doc, errors)
     validate_role_providers(doc, identities, errors)

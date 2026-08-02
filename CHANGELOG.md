@@ -28,6 +28,9 @@ All notable changes to this project will be documented here.
   `RoleAgency` turns that role's reply into the case's facts and artifacts
 - Write authority: `role_isolation.<role>.may_write` complements `may_read`,
   with disjoint ownership enforced so no role can write another's verdict
+- Artifact validity: `harness.artifact_checks` declares mechanical checks per
+  artifact, and the gate marks what fails so `gate_behavior.invalid_artifacts`
+  is reachable for the first time
 - Long-task supervision is enforced rather than described: derived miss counts,
   required progress-summary fields, stagnation on a repeated report, and
   escalation raised with the executive's own authority

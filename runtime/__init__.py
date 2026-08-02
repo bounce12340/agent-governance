@@ -17,6 +17,8 @@ from .adapters import (
 )
 from .agency import AgencyError, RoleAgency
 from .case import Case
+from .checks import CHECKS
+from .checks import failures as artifact_failures
 from .executor import (
     CaseRunner,
     ExecutionError,
@@ -37,6 +39,7 @@ from .supervision import (
 __all__ = [
     "AdapterError",
     "AgencyError",
+    "CHECKS",
     "AnthropicMessagesAdapter",
     "Case",
     "CaseRunner",
@@ -58,5 +61,6 @@ __all__ = [
     "StubAdapter",
     "SupervisionError",
     "SupervisionResult",
+    "artifact_failures",
     "build_adapter",
 ]
