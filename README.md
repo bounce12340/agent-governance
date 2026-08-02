@@ -326,6 +326,7 @@ These examples are written like technical specs, not marketing copy.
 - [Loop engineering / 迴圈工程](docs/loop-engineering.md)
 - [Graph engineering / 圖工程](docs/graph-engineering.md)
 - [Model interfaces / 模型接口](docs/model-interfaces.md)
+- [Case execution / 案件執行](docs/case-execution.md)
 
 ### Examples and references / 範例與參考
 

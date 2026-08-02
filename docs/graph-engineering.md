@@ -63,11 +63,16 @@ both directions of mismatch — but adds a `guard` and a `required_evidence` to
 each of the 14 edges. A transition with no stated condition is a routing
 decision nobody can review.
 
-Where a state fans out, the guards must be mutually exclusive or carry an
-explicit priority order. `REWORK` is the worked example: it routes to
-`EXECUTIVE` under `rework_budget_remaining` and to `REJECTED` under
-`rework_budget_exhausted`. Mutual exclusion is currently a documented
-convention, checked by review rather than by the validator.
+Where a state fans out, the guards must be mutually exclusive. `REWORK` is the
+worked example: it routes to `EXECUTIVE` under `rework_budget_remaining` and to
+`REJECTED` under `rework_budget_exhausted`.
+
+This is enforced twice rather than asserted once. The validator checks that
+every declared `guard` has an implementation in `runtime/guards.py`, so an edge
+nothing can ever take fails before it ships. The executor then refuses to route
+when more than one guard on a fan-out is satisfied, because picking one would
+make the flow depend on dictionary ordering. See
+[Case execution](case-execution.md).
 
 ### Role isolation as a graph property (English)
 
@@ -138,10 +143,16 @@ EXECUTIVE -> HARNESS_SUBMITTED -> JUDICIARY -> LAW_AMENDMENT_REQUEST -> LEGISLAT
 但額外為 14 條邊各自加上 `guard` 與 `required_evidence`。
 沒有寫明條件的轉換，等於一個沒有人能審查的路由決策。
 
-當一個狀態有多條出邊時，guard 必須互斥，或有明確的優先順序。
+當一個狀態有多條出邊時，guard 必須互斥。
 `REWORK` 是標準範例：在 `rework_budget_remaining` 時走向 `EXECUTIVE`，
 在 `rework_budget_exhausted` 時走向 `REJECTED`。
-互斥性目前是文件約定，由人工審查把關，尚未由驗證器強制。
+
+這件事被強制了兩次，而不是只被主張一次。
+驗證器會檢查每個宣告的 `guard` 在 `runtime/guards.py` 都有實作，
+所以一條永遠不可能被走到的邊，在出貨前就會失敗。
+執行器則會在同一個 fan-out 上有超過一個 guard 成立時拒絕路由，
+因為挑其中一條等於讓流程取決於字典順序。
+詳見[案件執行](case-execution.md)。
 
 ### 角色隔離也是一種圖性質（繁體中文）
 

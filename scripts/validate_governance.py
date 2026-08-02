@@ -118,6 +118,26 @@ KNOWN_INTERFACES = {"openai_chat_completions", "anthropic_messages", "stub"}
 # credential. Every other interface must carry both.
 OFFLINE_INTERFACES = {"stub"}
 
+# Guards the executor can evaluate. Keep in sync with runtime/guards.py:GUARDS.
+# A guard named in graph.edges with no implementation is an edge nothing can
+# ever take, which the graph checks alone would not notice.
+KNOWN_GUARDS = {
+    "request_received",
+    "law_published",
+    "law_ambiguous",
+    "all_required_artifacts_present",
+    "harness_gate_satisfied",
+    "red_line_violated",
+    "law_defective",
+    "law_items_unproven",
+    "all_law_items_proven",
+    "rework_budget_remaining",
+    "rework_budget_exhausted",
+    "amendment_accepted",
+    "clarification_needs_law_change",
+    "clarification_resolved_in_place",
+}
+
 ENTRY_STATE = "NEW"
 
 
@@ -433,6 +453,10 @@ def validate_graph(
                     errors.append(
                         f"graph.edges.{source}.{target}.{key} must be a non-empty string"
                     )
+            if isinstance(edge.get("guard"), str) and edge["guard"] not in KNOWN_GUARDS:
+                errors.append(
+                    f"graph.edges.{source}.{target}.guard has no implementation: {edge['guard']}"
+                )
 
     workflow_edges = {
         (source, target)
