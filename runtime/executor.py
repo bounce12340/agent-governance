@@ -148,9 +148,9 @@ class CaseRunner:
 
         loop_name = self.loop_entry_edges.get((case.state, target))
         if loop_name:
-            stalled = self.account_for_loop(case, loop_name)
+            stalled = self.account_for_loop(case, loop_name, target)
             if stalled:
-                case.record(case.state, target, guard_name, evidence, loop_name)
+                case.record(case.state, target, guard_name, evidence, loop_name, note=stalled)
                 return self.escalate(case, loop_name, stalled)
 
         case.record(case.state, target, guard_name, evidence, loop_name)
@@ -158,20 +158,35 @@ class CaseRunner:
 
     # --- loop accounting ---------------------------------------------------
 
-    def account_for_loop(self, case: Case, loop_name: str) -> str | None:
-        """Count one iteration and report stagnation.
+    def account_for_loop(self, case: Case, loop_name: str, target: str) -> str | None:
+        """Count one iteration; report stagnation or an exhausted budget.
 
         Counting alone only limits how long a case spins; comparing the
-        per-iteration artifact is what detects spinning in place.
+        per-iteration artifact is what detects spinning in place. Both are
+        needed, and neither substitutes for the other: fresh evidence every
+        pass defeats stagnation detection, which is exactly when the bound has
+        to do the work.
         """
         loop = self.loops[loop_name]
         case.loop_iterations[loop_name] = case.iterations(loop_name) + 1
+        count = case.iterations(loop_name)
 
         artifact_name = loop.get("per_iteration_artifact", "")
         seen = case.loop_evidence.setdefault(loop_name, [])
         seen.append(case.artifacts.get(artifact_name))
         if len(seen) >= 2 and seen[-1] is not None and seen[-1] == seen[-2]:
-            return loop.get("stagnation_rule", "stagnation")
+            return f"stagnated ({loop.get('stagnation_rule', 'stagnation')})"
+
+        bound = int(loop.get("max_iterations") or 0)
+        if bound and count > bound:
+            # The graph is the authority on routing, the same reason escalation
+            # cannot teleport. If the loop's escalation target is reachable
+            # from where the case is headed, the declared guards take it there
+            # and the trail shows the route. Only step in when the graph has no
+            # way to express the overflow.
+            escalation = loop.get("escalation_target", "")
+            if escalation not in (self.edges.get(target) or {}):
+                return f"exceeded its bound of {bound} on iteration {count}"
         return None
 
     def escalate(self, case: Case, loop_name: str, reason: str) -> StepResult:
@@ -182,11 +197,18 @@ class CaseRunner:
         the same graph invariants the validator enforces.
         """
         target = self.loops[loop_name].get("escalation_target", "")
-        note = f"{loop_name} stagnated ({reason}), escalating to {target}"
+        note = f"{loop_name} {reason}, escalating to {target}"
         edge = (self.edges.get(case.state) or {}).get(target)
         if edge is None:
             return StepResult(RunStatus.ESCALATED, f"{note}; no legal edge from {case.state}")
-        case.record(case.state, target, edge.get("guard", ""), edge.get("required_evidence", ""), loop_name)
+        case.record(
+            case.state,
+            target,
+            edge.get("guard", ""),
+            edge.get("required_evidence", ""),
+            loop_name,
+            note=reason,
+        )
         return StepResult(RunStatus.ESCALATED, note, target)
 
     # --- run to completion -------------------------------------------------

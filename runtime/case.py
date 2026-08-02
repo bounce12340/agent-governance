@@ -35,16 +35,28 @@ class Case:
     def iterations(self, loop_name: str) -> int:
         return self.loop_iterations.get(loop_name, 0)
 
-    def record(self, source: str, target: str, guard: str, evidence: str, loop: str | None) -> None:
-        self.history.append(
-            {
-                "from": source,
-                "to": target,
-                "guard": guard,
-                "evidence": evidence,
-                "loop": loop,
-            }
-        )
+    def record(
+        self,
+        source: str,
+        target: str,
+        guard: str,
+        evidence: str,
+        loop: str | None,
+        note: str | None = None,
+    ) -> None:
+        entry = {
+            "from": source,
+            "to": target,
+            "guard": guard,
+            "evidence": evidence,
+            "loop": loop,
+        }
+        if note:
+            # An escalation hop is taken because a loop gave out, not because
+            # the edge's guard was satisfied. Recording only the guard would
+            # put a false reason in the audit trail.
+            entry["escalation"] = note
+        self.history.append(entry)
         self.state = target
 
     def to_dict(self) -> dict[str, Any]:

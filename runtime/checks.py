@@ -59,6 +59,17 @@ def not_placeholder(value: Any) -> bool:
     return bool(text) and text not in PLACEHOLDERS
 
 
+# A digit-only test would fail a 繁體中文 plan written the way this repo writes
+# everything else, so the quantity may be spelled any of the three ways.
+CJK_NUMERALS = set("〇零一二三四五六七八九十百千萬万兩两")
+
+NUMBER_WORDS = {
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "fifteen", "twenty", "thirty", "forty",
+    "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand",
+}
+
+
 @check("contains_a_number")
 def contains_a_number(value: Any) -> bool:
     """A plan with no quantity in it states no threshold to test against.
@@ -66,7 +77,12 @@ def contains_a_number(value: Any) -> bool:
     This is the repo's own rule applied mechanically: an acceptance criterion
     that cannot be counted cannot be verified.
     """
-    return bool(re.search(r"\d", str(value)))
+    text = str(value)
+    if re.search(r"\d", text):
+        return True
+    if any(character in CJK_NUMERALS for character in text):
+        return True
+    return bool(set(re.findall(r"[a-z]+", text.lower())) & NUMBER_WORDS)
 
 
 def failures(
