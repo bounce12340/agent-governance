@@ -49,8 +49,11 @@ class StepResult:
 class CaseRunner:
     """Moves a case through the declared graph, one guarded edge at a time."""
 
-    def __init__(self, doc: dict[str, Any]) -> None:
+    def __init__(self, doc: dict[str, Any], agency: Any | None = None) -> None:
         self.doc = doc
+        # Optional on purpose: with no agency the runner is a pure state
+        # machine, which is what makes the routing testable without a model.
+        self.agency = agency
         graph = doc.get("graph") or {}
         harness = doc.get("harness") or {}
 
@@ -88,6 +91,9 @@ class CaseRunner:
     def step(self, case: Case) -> StepResult:
         if case.state in self.terminal_states:
             return StepResult(RunStatus.TERMINAL, f"case ended at {case.state}")
+
+        if self.agency is not None:
+            self.agency.act(case)
 
         if case.state == "HARNESS_SUBMITTED":
             blocked = self.gate_check(case)

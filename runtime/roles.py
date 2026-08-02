@@ -27,12 +27,14 @@ class RoleSession:
         prompt_scope: str,
         may_read: list[str],
         may_not_read: list[str],
+        may_write: list[str] | None = None,
     ) -> None:
         self.role = role
         self.adapter = adapter
         self.prompt_scope = prompt_scope
         self.may_read = list(may_read)
         self.may_not_read = list(may_not_read)
+        self.may_write = list(may_write or [])
 
         overlap = sorted(set(self.may_read) & set(self.may_not_read))
         if overlap:
@@ -46,8 +48,36 @@ class RoleSession:
             f"Prompt scope: {self.prompt_scope}.\n"
             f"You may read: {', '.join(self.may_read)}.\n"
             f"You may never read or infer: {', '.join(self.may_not_read)}.\n"
+            f"You may write only these keys: {', '.join(self.may_write)}.\n"
+            "Reply with JSON only, shaped "
+            '{"facts": {...}, "artifacts": {...}}. '
+            "Writing any other key is a governance violation and will be refused.\n"
             "Stay inside your role. Do not perform another role's work."
         )
+
+    def apply_writes(self, case: Any, payload: dict[str, Any]) -> list[str]:
+        """Apply a role's declared writes, refusing anything outside its authority.
+
+        Overstepping raises rather than being trimmed. A role reaching for
+        another role's key is exactly the failure this framework exists to
+        catch, so it should be loud.
+        """
+        facts = payload.get("facts") or {}
+        artifacts = payload.get("artifacts") or {}
+        if not isinstance(facts, dict) or not isinstance(artifacts, dict):
+            raise IsolationError(f"role {self.role} returned a malformed write payload")
+
+        allowed = set(self.may_write)
+        overreach = sorted((set(facts) | set(artifacts)) - allowed)
+        if overreach:
+            raise IsolationError(
+                f"role {self.role} tried to write outside its authority: "
+                f"{', '.join(overreach)}"
+            )
+
+        case.facts.update(facts)
+        case.artifacts.update(artifacts)
+        return sorted(set(facts) | set(artifacts))
 
     def build_context(self, materials: dict[str, Any]) -> str:
         """Assemble a prompt from the allowlist.

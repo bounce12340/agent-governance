@@ -13,7 +13,12 @@
     "checkpoint_grace_minutes": 10,
     "max_missed_checkpoints": 2,
     "escalation_on_miss": "LAW_CLARIFICATION_REQUEST",
-    "require_progress_summary": ["completed", "blocked", "next_step", "eta"]
+    "require_progress_summary": [
+      "completed",
+      "blocked",
+      "next_step",
+      "eta"
+    ]
   },
   "providers": {
     "openai_primary": {
@@ -54,22 +59,62 @@
       "model": "separate",
       "provider": "anthropic_primary",
       "prompt_scope": "law_writing_only",
-      "may_read": ["user_request", "constitution"],
-      "may_not_read": ["executive_private_notes", "judiciary_verdict_details"]
+      "may_read": [
+        "user_request",
+        "constitution"
+      ],
+      "may_not_read": [
+        "executive_private_notes",
+        "judiciary_verdict_details"
+      ],
+      "may_write": [
+        "law",
+        "acceptance_criteria",
+        "clarification_requires_amendment"
+      ]
     },
     "executive": {
       "model": "separate",
       "provider": "openai_primary",
       "prompt_scope": "execution_only",
-      "may_read": ["user_request", "law", "constitution"],
-      "may_not_read": ["judiciary_private_deliberation"]
+      "may_read": [
+        "user_request",
+        "law",
+        "constitution"
+      ],
+      "may_not_read": [
+        "judiciary_private_deliberation"
+      ],
+      "may_write": [
+        "open_ambiguity_items",
+        "ambiguity_notes",
+        "test_plan",
+        "evidence_bundle",
+        "output_snapshot",
+        "failure_mode_notes",
+        "rework_diff_note"
+      ]
     },
     "judiciary": {
       "model": "separate",
       "provider": "openai_compatible_local",
       "prompt_scope": "verification_only",
-      "may_read": ["law", "case_artifacts", "harness_artifacts", "constitution"],
-      "may_not_read": ["legislative_original_reasoning", "executive_private_notes"]
+      "may_read": [
+        "law",
+        "case_artifacts",
+        "harness_artifacts",
+        "constitution"
+      ],
+      "may_not_read": [
+        "legislative_original_reasoning",
+        "executive_private_notes"
+      ],
+      "may_write": [
+        "unresolved_law_items",
+        "defective_law_items",
+        "red_line_violated",
+        "amendment_reason"
+      ]
     }
   },
   "workflow": {
@@ -86,14 +131,36 @@
       "LAW_CLARIFICATION_REQUEST"
     ],
     "transitions": {
-      "NEW": ["LEGISLATIVE"],
-      "LEGISLATIVE": ["EXECUTIVE"],
-      "EXECUTIVE": ["HARNESS_SUBMITTED", "LAW_CLARIFICATION_REQUEST"],
-      "HARNESS_SUBMITTED": ["JUDICIARY"],
-      "JUDICIARY": ["PASSED", "REWORK", "REJECTED", "LAW_AMENDMENT_REQUEST"],
-      "REWORK": ["EXECUTIVE", "REJECTED"],
-      "LAW_AMENDMENT_REQUEST": ["LEGISLATIVE"],
-      "LAW_CLARIFICATION_REQUEST": ["LEGISLATIVE", "EXECUTIVE"]
+      "NEW": [
+        "LEGISLATIVE"
+      ],
+      "LEGISLATIVE": [
+        "EXECUTIVE"
+      ],
+      "EXECUTIVE": [
+        "HARNESS_SUBMITTED",
+        "LAW_CLARIFICATION_REQUEST"
+      ],
+      "HARNESS_SUBMITTED": [
+        "JUDICIARY"
+      ],
+      "JUDICIARY": [
+        "PASSED",
+        "REWORK",
+        "REJECTED",
+        "LAW_AMENDMENT_REQUEST"
+      ],
+      "REWORK": [
+        "EXECUTIVE",
+        "REJECTED"
+      ],
+      "LAW_AMENDMENT_REQUEST": [
+        "LEGISLATIVE"
+      ],
+      "LAW_CLARIFICATION_REQUEST": [
+        "LEGISLATIVE",
+        "EXECUTIVE"
+      ]
     }
   },
   "harness": {
@@ -111,7 +178,14 @@
   "loops": {
     "rework_loop": {
       "scope": "graph",
-      "paths": [["JUDICIARY", "REWORK", "EXECUTIVE", "HARNESS_SUBMITTED"]],
+      "paths": [
+        [
+          "JUDICIARY",
+          "REWORK",
+          "EXECUTIVE",
+          "HARNESS_SUBMITTED"
+        ]
+      ],
       "entry_condition": "judiciary_returns_rework",
       "convergence_metric": "unresolved_law_items",
       "exit_condition": "unresolved_law_items_is_zero",
@@ -123,8 +197,15 @@
     "clarification_loop": {
       "scope": "graph",
       "paths": [
-        ["EXECUTIVE", "LAW_CLARIFICATION_REQUEST"],
-        ["EXECUTIVE", "LAW_CLARIFICATION_REQUEST", "LEGISLATIVE"]
+        [
+          "EXECUTIVE",
+          "LAW_CLARIFICATION_REQUEST"
+        ],
+        [
+          "EXECUTIVE",
+          "LAW_CLARIFICATION_REQUEST",
+          "LEGISLATIVE"
+        ]
       ],
       "entry_condition": "executive_reports_ambiguous_law",
       "convergence_metric": "open_ambiguity_items",
@@ -137,7 +218,13 @@
     "amendment_loop": {
       "scope": "graph",
       "paths": [
-        ["JUDICIARY", "LAW_AMENDMENT_REQUEST", "LEGISLATIVE", "EXECUTIVE", "HARNESS_SUBMITTED"]
+        [
+          "JUDICIARY",
+          "LAW_AMENDMENT_REQUEST",
+          "LEGISLATIVE",
+          "EXECUTIVE",
+          "HARNESS_SUBMITTED"
+        ]
       ],
       "entry_condition": "judiciary_requests_law_amendment",
       "convergence_metric": "defective_law_items",
@@ -159,8 +246,23 @@
       "escalation_target": "LAW_CLARIFICATION_REQUEST"
     }
   },
+  "state_roles": {
+    "NEW": null,
+    "LEGISLATIVE": "legislative",
+    "EXECUTIVE": "executive",
+    "HARNESS_SUBMITTED": null,
+    "JUDICIARY": "judiciary",
+    "REWORK": "executive",
+    "LAW_AMENDMENT_REQUEST": "judiciary",
+    "LAW_CLARIFICATION_REQUEST": "legislative",
+    "PASSED": null,
+    "REJECTED": null
+  },
   "graph": {
-    "terminal_states": ["PASSED", "REJECTED"],
+    "terminal_states": [
+      "PASSED",
+      "REJECTED"
+    ],
     "invariants": {
       "require_all_states_reachable": true,
       "require_terminal_reachable_from_all": true,

@@ -43,6 +43,43 @@ crossed with it, so a verdict can be reconstructed from the trail alone.
 6. Apply loop accounting.
 7. Move, and record the hop.
 
+### Roles act; the graph routes
+
+`state_roles` says which role acts in which state. `NEW` is intake and
+`HARNESS_SUBMITTED` is a gate rather than a work state, so both declare `null`,
+as do the terminal states. A state with no owner cannot produce evidence, so a
+case blocked there needs a caller, not another model call.
+
+`RoleAgency` asks the owning role for that state's output, parses the reply as
+JSON shaped `{"facts": {...}, "artifacts": {...}}`, and applies it. The
+executor takes an agency optionally — with none, it is a pure state machine,
+which is what keeps routing testable without a model.
+
+An unreadable reply raises `AgencyError` rather than blocking quietly. A model
+that stopped returning JSON is an operational failure, and a case that merely
+stalls would hide it.
+
+### Write authority is the other half of isolation
+
+`may_read` has always existed. `may_write` is its counterpart, and without it
+letting models fill in a case would hand routing to whichever model spoke last:
+a judiciary that can write `unresolved_law_items` is deciding the verdict, and
+an executive that could write it would be clearing itself.
+
+So each role owns a disjoint set of keys, and the validator rejects any config
+where two roles claim the same one. Shared write authority is shared
+authorship — the audit trail would no longer say who decided.
+
+| Role | Owns |
+| --- | --- |
+| legislative | `law`, `acceptance_criteria`, `clarification_requires_amendment` |
+| executive | `open_ambiguity_items`, `ambiguity_notes`, and the harness artifacts |
+| judiciary | `unresolved_law_items`, `defective_law_items`, `red_line_violated`, `amendment_reason` |
+
+Overstepping raises rather than being trimmed, and the whole payload is
+refused rather than partly applied. A role reaching for another role's key is
+precisely the failure this framework exists to catch, so it is loud.
+
 ### Guards live in code, names live in config
 
 `config` names a guard; `runtime/guards.py` supplies its meaning. The validator
@@ -125,6 +162,44 @@ print(case.trail())         # NEW -> LEGISLATIVE -> ... -> PASSED
 5. 檢查該條邊的 `required_evidence` 是否存在。
 6. 進行迴圈計數。
 7. 前進，並記錄這一跳。
+
+### 角色負責行動，圖負責路由
+
+`state_roles` 指定每個狀態由哪個角色行動。
+`NEW` 是收件、`HARNESS_SUBMITTED` 是門檻而不是工作狀態，兩者都宣告為 `null`，
+終局狀態亦然。
+沒有負責角色的狀態無法產生證據，
+所以卡在那裡的案件需要的是呼叫端介入，而不是再叫一次模型。
+
+`RoleAgency` 會向該狀態的負責角色索取產出，
+把回覆解析成 `{"facts": {...}, "artifacts": {...}}` 形狀的 JSON 並套用。
+執行器可以選擇不帶 agency —— 不帶的時候它就是一台純粹的狀態機，
+這正是讓路由邏輯能在沒有模型的情況下被測試的原因。
+
+無法解析的回覆會拋出 `AgencyError`，而不是安靜地卡住。
+模型不再回傳 JSON 是一種運作失敗，
+如果只是讓案件停住，這個問題就會被藏起來。
+
+### 寫入權限是角色隔離的另一半
+
+`may_read` 一直都在，`may_write` 是它的對稱物。
+沒有它的話，讓模型填寫案件內容，等於把路由權交給最後發言的那個模型：
+能寫 `unresolved_law_items` 的司法權就是在下判決，
+而如果行政權也能寫它，那就是自己幫自己脫罪。
+
+因此每個角色擁有一組互不重疊的欄位，
+只要有兩個角色宣稱同一個欄位，驗證器就會拒絕。
+共享寫入權就是共享作者身分 —— 稽核軌跡將無法說明究竟是誰做的決定。
+
+| 角色 | 擁有 |
+| --- | --- |
+| 立法權 | `law`、`acceptance_criteria`、`clarification_requires_amendment` |
+| 行政權 | `open_ambiguity_items`、`ambiguity_notes`，以及各項 harness 證據 |
+| 司法權 | `unresolved_law_items`、`defective_law_items`、`red_line_violated`、`amendment_reason` |
+
+越權會直接拋錯而不是被修剪掉，
+而且整份 payload 會被拒絕，不會只套用一部分。
+角色伸手去碰另一個角色的欄位，正是這個框架存在的理由，所以它必須很大聲。
 
 ### guard 的實作在程式裡，名稱在設定裡
 
