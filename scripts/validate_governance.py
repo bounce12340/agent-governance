@@ -808,6 +808,17 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
                     "loops.checkpoint_loop.max_iterations must equal "
                     "long_task.max_missed_checkpoints"
                 )
+            if checkpoint_loop.get("escalation_target") != long_task.get("escalation_on_miss"):
+                errors.append(
+                    "loops.checkpoint_loop.escalation_target must equal "
+                    "long_task.escalation_on_miss"
+                )
+
+    # A supervision escalation still has to be somewhere the graph can go.
+    if long_task and state_set:
+        target = long_task.get("escalation_on_miss")
+        if target not in state_set:
+            errors.append("long_task.escalation_on_miss must be a declared state")
 
     return errors
 

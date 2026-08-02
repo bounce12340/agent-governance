@@ -52,8 +52,8 @@ CI (`.github/workflows/ci.yml`) runs three jobs on push/PR to `main`: markdownli
 with no secrets and no network — the `stub` interface exists so it can.
 
 `TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
-`tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py` and
-`tests/test_cli.py`, which are the automated suite.
+`tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py`,
+`tests/test_cli.py` and `tests/test_supervision.py`, which are the automated suite.
 
 ## Architecture: where the governance model actually lives
 
@@ -73,8 +73,9 @@ alone will either break CI or silently desync the docs from the enforced contrac
    `docs/governance-architecture.md` (layer descriptions), `docs/loop-engineering.md`
    (loop contract + declared loops), `docs/graph-engineering.md` (graph invariants +
    enumerated cycles), `docs/model-interfaces.md` (provider schema + adapter contract),
-   `docs/case-execution.md` (executor semantics), `CONSTITUTION.md` (non-negotiable
-   rules). These restate the config in both languages.
+   `docs/case-execution.md` (executor semantics), `docs/long-task-supervision.md`
+   (checkpoint contract), `CONSTITUTION.md` (non-negotiable rules). These restate the
+   config in both languages.
 5. **`runtime/`** — consumes the config at run time and hardcodes none of the flow. Two
    registries must stay equal to validator constants, each asserted by a test so drift
    fails CI rather than surfacing at run time: `runtime/adapters.py:INTERFACES` mirrors
@@ -103,7 +104,8 @@ simple cycle in `workflow.transitions` and fails on any cycle not declared in `l
 checks reachability from `NEW` and reverse reachability to a terminal state, requires
 `graph.edges` to mirror `workflow.transitions` exactly in both directions, and cross-checks
 `loops.rework_loop.max_iterations` against `constitution.max_rework_count` and
-`loops.checkpoint_loop.max_iterations` against `long_task.max_missed_checkpoints`.
+`loops.checkpoint_loop.max_iterations` against `long_task.max_missed_checkpoints`, and
+`loops.checkpoint_loop.escalation_target` against `long_task.escalation_on_miss`.
 
 For providers it enforces that `api_key_env` looks like an environment variable name rather
 than a literal key, that non-`stub` interfaces carry an `http(s)://` `base_url`, and that no

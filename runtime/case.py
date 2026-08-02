@@ -24,6 +24,9 @@ class Case:
     history: list[dict[str, Any]] = field(default_factory=list)
     loop_iterations: dict[str, int] = field(default_factory=dict)
     loop_evidence: dict[str, list[Any]] = field(default_factory=dict)
+    checkpoints: list[dict[str, Any]] = field(default_factory=list)
+    last_checkpoint_at: float | None = None
+    missed_checkpoints: int = 0
 
     def fact(self, name: str, default: Any = 0) -> Any:
         return self.facts.get(name, default)
@@ -53,6 +56,9 @@ class Case:
             "history": self.history,
             "loop_iterations": self.loop_iterations,
             "loop_evidence": self.loop_evidence,
+            "checkpoints": self.checkpoints,
+            "last_checkpoint_at": self.last_checkpoint_at,
+            "missed_checkpoints": self.missed_checkpoints,
         }
 
     @classmethod
@@ -66,6 +72,9 @@ class Case:
             history=data.get("history") or [],
             loop_iterations=data.get("loop_iterations") or {},
             loop_evidence=data.get("loop_evidence") or {},
+            checkpoints=data.get("checkpoints") or [],
+            last_checkpoint_at=data.get("last_checkpoint_at"),
+            missed_checkpoints=data.get("missed_checkpoints") or 0,
         )
 
     def trail(self) -> str:
