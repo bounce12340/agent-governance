@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Mostly a specification-and-documentation repo for a multi-agent AI governance framework
 (separation of powers: legislative / executive / judiciary, plus a harness evidence gate).
 
-Two things are executable: `scripts/validate_governance.py` (config validator) and
-`runtime/` (binds roles to model interfaces and executes the state machine). Everything
-else is spec. In particular the `ai-gov` CLI and the `POST /laws`-style REST endpoints in
-`docs/cli-api-reference.md` are a *proposed* surface with no implementation — do not
-assume they exist or try to run them.
+Three things are executable: `scripts/validate_governance.py` (config validator), `runtime/`
+(binds roles to model interfaces and executes the state machine), and `ai_gov/` (the
+`ai-gov` CLI, run via `./bin/ai-gov` or `python3 -m ai_gov`). Everything else is spec — in
+particular the `POST /laws`-style REST endpoints in `docs/cli-api-reference.md` remain a
+*proposed* surface with no implementation.
 
 ## Commands
 
@@ -30,6 +30,11 @@ python3 -m unittest tests.test_runtime.RoleIsolationTest.test_forbidden_material
 # Report which model interface is bound to which role (calls no model)
 python3 -m runtime
 
+# The CLI, straight from a checkout (no install, no dependencies)
+./bin/ai-gov --help
+./bin/ai-gov law create --title "T" --metric "M" --redline "R"
+./bin/ai-gov judge run --case CASE-001 --unresolved 0
+
 # Lint markdown exactly as CI does
 npx --yes markdownlint-cli2 "**/*.md" "!node_modules"
 
@@ -39,15 +44,16 @@ npx --yes markdownlint-cli2 README.md
 
 Validator exit codes: `0` pass, `1` file not found, `2` parse failure, `3` validation errors
 (each error printed as a `- <message>` line). `python3 -m runtime` exits `1` if any
-credential is missing.
+credential is missing. `ai-gov` exit codes: `0` ok/`PASSED`, `1` usage or refused write,
+`2` blocked, `3` `REJECTED`, `4` escalated — documented in `docs/cli-api-reference.md`.
 
 CI (`.github/workflows/ci.yml`) runs three jobs on push/PR to `main`: markdownlint over all
 `**/*.md`, the validator against both configs, and the runtime tests. The runtime job runs
 with no secrets and no network — the `stub` interface exists so it can.
 
 `TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
-`tests/test_runtime.py`, `tests/test_executor.py` and `tests/test_agency.py`, which are the
-automated suite.
+`tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py` and
+`tests/test_cli.py`, which are the automated suite.
 
 ## Architecture: where the governance model actually lives
 
