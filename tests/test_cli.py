@@ -25,11 +25,13 @@ from ai_gov.store import Store  # noqa: E402
 from runtime.roles import IsolationError  # noqa: E402
 from runtime.session import GovernanceSession  # noqa: E402
 
+# Evidence has to survive the artifact checks, so these are written the way a
+# real submission would be rather than as one-letter stand-ins.
 HARNESS_NOTES = [
-    "--note", "test_plan=TP",
-    "--note", "evidence_bundle=EB",
-    "--note", "output_snapshot=OS",
-    "--note", "failure_mode_notes=FMN",
+    "--note", "test_plan=at least 30 responses, 5 interviews",
+    "--note", "evidence_bundle=survey export attached",
+    "--note", "output_snapshot=screenshots of the core flow",
+    "--note", "failure_mode_notes=crash on empty state, documented",
 ]
 
 

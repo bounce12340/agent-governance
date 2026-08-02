@@ -43,6 +43,49 @@ crossed with it, so a verdict can be reconstructed from the trail alone.
 6. Apply loop accounting.
 7. Move, and record the hop.
 
+### The harness gate has two verdicts
+
+`gate_behavior` has always named both, but only one was reachable.
+
+**Missing artifacts stop the case.** It cannot leave `HARNESS_SUBMITTED` at
+all, and the verdict is `gate_behavior.missing_artifacts`.
+
+**Invalid artifacts do not stop it.** The config says invalid evidence means
+`REWORK`, and the only lawful route to `REWORK` runs through the judiciary. So
+the gate marks what failed and lets the case go be judged. The existing
+`law_items_unproven` guard already read `invalid_artifacts`; nothing had ever
+filled it.
+
+The practical effect is that a judiciary verdict of "nothing unproven" no
+longer passes a case whose evidence says nothing. Before this, an artifact
+submitted as `TODO` reached `PASSED`.
+
+Marks are recomputed on every pass, so repairing an artifact clears it and the
+rework loop can converge.
+
+### Validity is mechanical, on purpose
+
+`harness.artifact_checks` names checks per artifact; `runtime/checks.py`
+implements them; the validator rejects any check with no implementation and any
+required artifact with no checks.
+
+| Check | Rejects |
+| --- | --- |
+| `non_empty` | blank or whitespace |
+| `not_placeholder` | `TODO`, `TBD`, `N/A`, `-`, `?` and friends |
+| `contains_a_number` | a plan with no quantity in it |
+
+These do not ask whether the evidence proves the law. That is the judiciary's
+job, and a second judge here would have no isolation. What belongs at the gate
+is the narrow question a machine can answer without reading for meaning.
+
+`contains_a_number` applies to `test_plan` because a plan that states no
+threshold cannot be tested against — the repo's own "no vague success criteria"
+rule, applied mechanically.
+
+`not_placeholder` rejects an artifact that *is* a placeholder, not one that
+mentions the word: "No blockers pending review" passes.
+
 ### Roles act; the graph routes
 
 `state_roles` says which role acts in which state. `NEW` is intake and
@@ -162,6 +205,51 @@ print(case.trail())         # NEW -> LEGISLATIVE -> ... -> PASSED
 5. 檢查該條邊的 `required_evidence` 是否存在。
 6. 進行迴圈計數。
 7. 前進，並記錄這一跳。
+
+### Harness gate 有兩種結果
+
+`gate_behavior` 一直都寫了兩種，但只有一種是走得到的。
+
+**證據缺漏會擋住案件。** 它根本離不開 `HARNESS_SUBMITTED`，
+結果就是 `gate_behavior.missing_artifacts`。
+
+**證據無效不會擋住它。**
+設定寫的是無效證據等於 `REWORK`，
+而通往 `REWORK` 唯一合法的路線要經過司法權。
+所以 gate 只把失敗的項目標記起來，讓案件去被審判。
+既有的 `law_items_unproven` guard 本來就會讀 `invalid_artifacts`，
+只是從來沒有任何東西去填它。
+
+實際效果是：司法權判定「沒有未證明的條目」，
+不再能讓一個證據空洞的案件過關。
+在此之前，一個內容寫著 `TODO` 的 artifact 是可以一路走到 `PASSED` 的。
+
+標記每次都會重新計算，所以修好某個 artifact 就會清掉它的標記，
+rework 迴圈因此能夠收斂。
+
+### 有效性檢查刻意只做機械判斷
+
+`harness.artifact_checks` 為每個 artifact 指定檢查，
+`runtime/checks.py` 負責實作，
+驗證器則會拒絕沒有實作的檢查，以及沒有任何檢查的必要 artifact。
+
+| 檢查 | 擋掉什麼 |
+| --- | --- |
+| `non_empty` | 空白或只有空格 |
+| `not_placeholder` | `TODO`、`TBD`、`N/A`、`-`、`?` 之類 |
+| `contains_a_number` | 沒有任何數量的計畫 |
+
+這些檢查不問「證據有沒有證明法律」。
+那是司法權的工作，在這裡再放一個法官等於多一個沒有隔離的審查者。
+屬於 gate 的，是機器不必讀懂內容就能回答的那個窄問題。
+
+`contains_a_number` 套用在 `test_plan` 上，
+因為沒有寫出門檻的計畫無法被驗證 ——
+這就是把 repo 自己「禁止模糊成功定義」那條規則機械化。
+
+`not_placeholder` 擋的是「本身就是佔位符」的 artifact，
+不是「提到佔位符字眼」的 artifact：
+「No blockers pending review」會通過。
 
 ### 角色負責行動，圖負責路由
 

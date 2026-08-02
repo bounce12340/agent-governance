@@ -135,6 +135,22 @@ harness:
   gate_behavior:
     missing_artifacts: INCOMPLETE
     invalid_artifacts: REWORK
+  # Mechanical checks only. Whether evidence actually proves the law is the
+  # judiciary's job; a second judge here would have no isolation.
+  artifact_checks:
+    test_plan:
+      - non_empty
+      - not_placeholder
+      - contains_a_number
+    evidence_bundle:
+      - non_empty
+      - not_placeholder
+    output_snapshot:
+      - non_empty
+      - not_placeholder
+    failure_mode_notes:
+      - non_empty
+      - not_placeholder
 
 # Every cycle in the workflow graph must be declared here with a bound.
 # A loop is not required to be a graph cycle: checkpoint_loop is driven by

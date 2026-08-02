@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any
 
 from .case import Case
+from .checks import failures as artifact_failures
 from .guards import GUARDS
 
 
@@ -61,6 +62,7 @@ class CaseRunner:
         self.terminal_states = set(graph.get("terminal_states") or [])
         self.required_artifacts: list[str] = list(harness.get("required_artifacts") or [])
         self.gate_behavior: dict[str, str] = harness.get("gate_behavior") or {}
+        self.artifact_checks: dict[str, list[str]] = harness.get("artifact_checks") or {}
         self.loops: dict[str, dict[str, Any]] = doc.get("loops") or {}
 
         # The first edge of a declared path is that loop's entry edge, so
@@ -79,11 +81,24 @@ class CaseRunner:
     # --- the harness gate --------------------------------------------------
 
     def gate_check(self, case: Case) -> str | None:
-        """Return a gate verdict when the case may not leave HARNESS_SUBMITTED."""
+        """Return a gate verdict when the case may not leave HARNESS_SUBMITTED.
+
+        Missing evidence stops the case here. Invalid evidence does not: the
+        config says invalid artifacts mean `REWORK`, and the only lawful route
+        to `REWORK` runs through the judiciary. So the gate marks what failed
+        and lets the case go be judged — which is what turns
+        `gate_behavior.invalid_artifacts` from a setting nothing could reach
+        into a description of what actually happens.
+        """
         missing = [name for name in self.required_artifacts if name not in case.artifacts]
         if missing:
             verdict = self.gate_behavior.get("missing_artifacts", "INCOMPLETE")
             return f"{verdict}: missing {', '.join(sorted(missing))}"
+
+        # Recomputed every pass, so repairing an artifact clears its mark and
+        # the rework loop can actually converge.
+        case.artifact_failures = artifact_failures(case.artifacts, self.artifact_checks)
+        case.invalid_artifacts = set(case.artifact_failures)
         return None
 
     # --- one step ----------------------------------------------------------

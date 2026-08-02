@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from runtime.agency import RoleAgency  # noqa: E402
 from runtime.case import Case  # noqa: E402
+from runtime.checks import failures as artifact_failures  # noqa: E402
 from runtime.executor import CaseRunner, RunStatus  # noqa: E402
 from runtime.roles import IsolationError  # noqa: E402
 from runtime.session import DEFAULT_CONFIG, GovernanceSession  # noqa: E402
@@ -187,12 +188,19 @@ def cmd_harness_submit(args, session: GovernanceSession, store: Store) -> int:
     written = apply_as(session, "executive", case, {"artifacts": artifacts})
     store.save_case(case)
 
-    required = session.doc.get("harness", {}).get("required_artifacts", [])
+    harness = session.doc.get("harness", {})
+    required = harness.get("required_artifacts", [])
+    behavior = harness.get("gate_behavior", {})
     missing = [name for name in required if name not in case.artifacts]
     print(f"{case.case_id}: submitted {', '.join(written)}")
     if missing:
-        behavior = session.doc.get("harness", {}).get("gate_behavior", {})
         print(f"  {behavior.get('missing_artifacts', 'INCOMPLETE')}: still missing {', '.join(missing)}")
+
+    # Reported, not refused. An artifact that says nothing is still something
+    # the executive submitted, and the record should say so.
+    failed = artifact_failures(case.artifacts, harness.get("artifact_checks", {}))
+    for name in sorted(failed):
+        print(f"  {behavior.get('invalid_artifacts', 'REWORK')}: {name} fails {', '.join(failed[name])}")
     return EXIT_OK
 
 
@@ -267,8 +275,12 @@ def cmd_judge_show(args, session: GovernanceSession, store: Store) -> int:
     present = [name for name in required if name in case.artifacts]
     print(f"  harness: {len(present)}/{len(required)} artifacts")
     for name in required:
-        mark = "x" if name in case.artifacts else " "
-        print(f"    [{mark}] {name}")
+        if name not in case.artifacts:
+            print(f"    [ ] {name}")
+        elif name in case.artifact_failures:
+            print(f"    [!] {name} — fails {', '.join(case.artifact_failures[name])}")
+        else:
+            print(f"    [x] {name}")
 
     if case.loop_iterations:
         print("  loops:")
