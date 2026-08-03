@@ -31,6 +31,9 @@ All notable changes to this project will be documented here.
 - Every declared loop bound is enforced, not just the rework loop's; the graph
   routes the overflow where it can express it, and the loop layer halts the run
   where it cannot
+- Convergence checking: `convergence_rule` says how strictly a loop's declared
+  metric must fall, and a loop whose metric climbs now ends instead of running
+  out its budget
 - Model reply repair: fenced and prose-wrapped JSON is salvaged without a model
   call, and an unparseable reply gets one declared, bounded repair round trip
   before failing; repairs are counted on the case

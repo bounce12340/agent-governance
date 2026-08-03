@@ -72,6 +72,7 @@ REQUIRED_LOOP_KEYS = {
     "paths",
     "entry_condition",
     "convergence_metric",
+    "convergence_rule",
     "exit_condition",
     "max_iterations",
     "per_iteration_artifact",
@@ -88,6 +89,15 @@ LOOP_TEXT_KEYS = (
 )
 
 LOOP_SCOPES = {"graph", "supervision"}
+
+# Convergence rules the executor can apply. Keep in sync with
+# runtime/convergence.py:RULES. A loop declaring a metric nothing compares is
+# a loop whose convergence is decorative.
+KNOWN_CONVERGENCE_RULES = {
+    "must_not_increase",
+    "must_strictly_decrease",
+    "supervised_elsewhere",
+}
 
 REQUIRED_TERMINAL_STATES = {"PASSED", "REJECTED"}
 
@@ -394,6 +404,11 @@ def validate_loops(
                 errors.append(f"loops.{name}.{key} must be a non-empty string")
         if loop.get("escalation_target") not in state_set:
             errors.append(f"loops.{name}.escalation_target must be a declared state")
+        if loop.get("convergence_rule") not in KNOWN_CONVERGENCE_RULES:
+            errors.append(
+                f"loops.{name}.convergence_rule must be one of: "
+                + ", ".join(sorted(KNOWN_CONVERGENCE_RULES))
+            )
 
         scope = loop.get("scope")
         if scope not in LOOP_SCOPES:
