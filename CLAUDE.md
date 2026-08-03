@@ -53,8 +53,8 @@ with no secrets and no network — the `stub` interface exists so it can.
 
 `TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
 `tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py`,
-`tests/test_cli.py`, `tests/test_supervision.py` and `tests/test_checks.py`, which are the
-automated suite.
+`tests/test_cli.py`, `tests/test_supervision.py`, `tests/test_checks.py` and
+`tests/test_repair.py`, which are the automated suite.
 
 ## Architecture: where the governance model actually lives
 
@@ -68,7 +68,7 @@ alone will either break CI or silently desync the docs from the enforced contrac
    `REQUIRED_LONG_TASK_KEYS`, `REQUIRED_PROGRESS_FIELDS`, `ROLE_NAMES`,
    `REQUIRED_LOOP_NAMES`, `REQUIRED_LOOP_KEYS`, `REQUIRED_GRAPH_INVARIANTS`,
    `REQUIRED_EDGE_KEYS`, `REQUIRED_PROVIDER_KEYS`, `KNOWN_INTERFACES`, `KNOWN_GUARDS`,
-   `KNOWN_ARTIFACT_CHECKS`.
+   `KNOWN_ARTIFACT_CHECKS`, `REQUIRED_MODEL_REPLY_KEYS`.
    Adding a workflow state or harness artifact to the config alone does nothing; the
    validator only enforces what is listed here.
 4. **Prose docs** — `docs/state-machine.md` (state list + ASCII diagram),
@@ -119,7 +119,10 @@ configurations are required** for any valid config.
 It also enforces that `role_isolation.<role>.may_write` sets are disjoint across roles,
 that `state_roles` covers every state with either a declared role or an explicit `null`
 (terminal states must be `null`), and that every required harness artifact declares at
-least one implemented entry in `harness.artifact_checks`.
+least one implemented entry in `harness.artifact_checks`, and that
+`model_replies.max_repair_attempts` is a non-negative integer no greater than
+`MAX_REPAIR_CEILING` — a repair round trip is a retry, and this repo does not allow
+unbounded ones.
 
 These mirror the constitution's structural rules — harness before judgment, capped rework,
 role isolation, two-way feedback channels. Loosening one in the config without changing

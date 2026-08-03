@@ -22,6 +22,7 @@ class Case:
     artifacts: dict[str, Any] = field(default_factory=dict)
     invalid_artifacts: set[str] = field(default_factory=set)
     artifact_failures: dict[str, list[str]] = field(default_factory=dict)
+    reply_repairs: dict[str, int] = field(default_factory=dict)
     history: list[dict[str, Any]] = field(default_factory=list)
     loop_iterations: dict[str, int] = field(default_factory=dict)
     loop_evidence: dict[str, list[Any]] = field(default_factory=dict)
@@ -67,6 +68,7 @@ class Case:
             "artifacts": self.artifacts,
             "invalid_artifacts": sorted(self.invalid_artifacts),
             "artifact_failures": self.artifact_failures,
+            "reply_repairs": self.reply_repairs,
             "history": self.history,
             "loop_iterations": self.loop_iterations,
             "loop_evidence": self.loop_evidence,
@@ -84,6 +86,7 @@ class Case:
             artifacts=data.get("artifacts") or {},
             invalid_artifacts=set(data.get("invalid_artifacts") or []),
             artifact_failures=data.get("artifact_failures") or {},
+            reply_repairs=data.get("reply_repairs") or {},
             history=data.get("history") or [],
             loop_iterations=data.get("loop_iterations") or {},
             loop_evidence=data.get("loop_evidence") or {},

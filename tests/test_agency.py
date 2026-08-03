@@ -104,7 +104,9 @@ class MaterialsTest(unittest.TestCase):
 
 class MalformedReplyTest(unittest.TestCase):
     def act_with(self, text: str) -> None:
-        session = scripted_session({"legislative": [text]})
+        # Queued twice: the repair pass gets its round trip and still fails, so
+        # these tests cover the outcome after repair rather than instead of it.
+        session = scripted_session({"legislative": [text, text]})
         case = Case("CASE-001", facts={"user_request": "build it"})
         case.state = "LEGISLATIVE"
         RoleAgency(session).act(case)

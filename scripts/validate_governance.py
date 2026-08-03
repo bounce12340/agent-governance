@@ -142,6 +142,17 @@ KNOWN_GUARDS = {
 # runtime/checks.py:CHECKS.
 KNOWN_ARTIFACT_CHECKS = {"non_empty", "not_placeholder", "contains_a_number"}
 
+REQUIRED_MODEL_REPLY_KEYS = {
+    "require_json",
+    "max_repair_attempts",
+    "repair_instruction",
+}
+
+# A repair round trip is a retry. Capping it in the config rather than in code
+# keeps the framework's own rule — no unbounded retries — true of the layer
+# that talks to models.
+MAX_REPAIR_CEILING = 3
+
 ENTRY_STATE = "NEW"
 
 
@@ -592,6 +603,31 @@ def validate_role_providers(
                 )
 
 
+def validate_model_replies(doc: dict[str, Any], errors: list[str]) -> None:
+    replies = as_mapping(doc.get("model_replies"), "model_replies", errors)
+    if not replies:
+        return
+
+    missing = sorted(REQUIRED_MODEL_REPLY_KEYS - set(replies.keys()))
+    if missing:
+        errors.append(f"model_replies missing keys: {', '.join(missing)}")
+
+    if replies.get("require_json") is not True:
+        errors.append("model_replies.require_json must be true")
+
+    attempts = replies.get("max_repair_attempts")
+    if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
+        errors.append("model_replies.max_repair_attempts must be a non-negative integer")
+    elif attempts > MAX_REPAIR_CEILING:
+        errors.append(
+            f"model_replies.max_repair_attempts must be at most {MAX_REPAIR_CEILING}"
+        )
+
+    instruction = replies.get("repair_instruction")
+    if not isinstance(instruction, str) or not instruction:
+        errors.append("model_replies.repair_instruction must be a non-empty string")
+
+
 def validate_write_authority(doc: dict[str, Any], errors: list[str]) -> None:
     """No two roles may write the same key.
 
@@ -811,6 +847,7 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
 
     identities = validate_providers(doc, errors)
     validate_role_providers(doc, identities, errors)
+    validate_model_replies(doc, errors)
     validate_write_authority(doc, errors)
     validate_state_roles(doc, state_set, errors)
 

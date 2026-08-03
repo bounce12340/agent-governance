@@ -31,6 +31,9 @@ All notable changes to this project will be documented here.
 - Every declared loop bound is enforced, not just the rework loop's; the graph
   routes the overflow where it can express it, and the loop layer halts the run
   where it cannot
+- Model reply repair: fenced and prose-wrapped JSON is salvaged without a model
+  call, and an unparseable reply gets one declared, bounded repair round trip
+  before failing; repairs are counted on the case
 - Artifact validity: `harness.artifact_checks` declares mechanical checks per
   artifact, and the gate marks what fails so `gate_behavior.invalid_artifacts`
   is reachable for the first time

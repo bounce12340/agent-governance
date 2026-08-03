@@ -9,15 +9,45 @@ model can be tested without the flow.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from .case import Case
 from .roles import RoleSession
 from .session import GovernanceSession
 
+FENCED_BLOCK = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+
 
 class AgencyError(RuntimeError):
     pass
+
+
+def extract_object(text: str) -> dict[str, Any] | None:
+    """Recover a JSON object from a reply that is nearly JSON.
+
+    Models wrap payloads in prose and code fences constantly. Salvaging those
+    deterministically costs nothing and spends no model call, so it happens
+    before any repair round trip.
+    """
+    if not isinstance(text, str):
+        return None
+    stripped = text.strip()
+
+    candidates = [stripped]
+    candidates.extend(match.group(1).strip() for match in FENCED_BLOCK.finditer(stripped))
+    opening, closing = stripped.find("{"), stripped.rfind("}")
+    if 0 <= opening < closing:
+        candidates.append(stripped[opening : closing + 1])
+
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
 
 
 class RoleAgency:
@@ -30,6 +60,11 @@ class RoleAgency:
         self.required_artifacts: list[str] = list(
             (self.doc.get("harness") or {}).get("required_artifacts") or []
         )
+        replies = self.doc.get("model_replies") or {}
+        # A repair is a retry, so its ceiling is declared rather than assumed.
+        # An unbounded repair loop would be the exact failure the loop layer
+        # exists to prevent, one level down.
+        self.max_repair_attempts = int(replies.get("max_repair_attempts") or 0)
 
     def owner(self, state: str) -> RoleSession | None:
         role_name = self.state_roles.get(state)
@@ -69,17 +104,38 @@ class RoleAgency:
             return None
 
         available = {k: v for k, v in self.materials(case).items() if v not in (None, {})}
-        reply = role.ask(available)
-        try:
-            payload = json.loads(reply)
-        except (TypeError, ValueError):
-            # An unreadable role reply is an operational failure worth
-            # surfacing, not a case that quietly stalls.
+        context = role.build_context(available)
+        reply = role.adapter.complete(role.system_prompt(), context)
+
+        payload = extract_object(reply)
+        attempts = 0
+        while payload is None and attempts < self.max_repair_attempts:
+            attempts += 1
+            reply = role.adapter.complete(role.system_prompt(), self.repair_prompt(context, reply))
+            payload = extract_object(reply)
+
+        if attempts:
+            # Worth recording: a role that needs repairing is a fact about the
+            # run, and a silent retry would hide a model drifting off format.
+            case.reply_repairs[role.role] = case.reply_repairs.get(role.role, 0) + attempts
+
+        if payload is None:
             raise AgencyError(
-                f"role {role.role} did not return JSON at state {case.state}"
-            ) from None
-        if not isinstance(payload, dict):
-            raise AgencyError(
-                f"role {role.role} returned {type(payload).__name__}, expected an object"
+                f"role {role.role} did not return JSON at state {case.state} "
+                f"after {attempts} repair attempt(s)"
             )
         return role.apply_writes(case, payload)
+
+    def repair_prompt(self, context: str, reply: str) -> str:
+        """Ask again, showing the role its own unusable answer.
+
+        Only the role's own output is quoted back, so a repair cannot smuggle
+        in material the role may not read.
+        """
+        return (
+            "Your previous reply could not be parsed as JSON.\n"
+            'Reply again with a JSON object only, shaped {"facts": {...}, "artifacts": {...}}.\n'
+            "No prose, no explanation, no code fences.\n\n"
+            f"Your previous reply was:\n{reply}\n\n"
+            f"The request was:\n{context}"
+        )
