@@ -294,6 +294,11 @@ def cmd_judge_show(args, session: GovernanceSession, store: Store) -> int:
             bound = session.doc.get("loops", {}).get(loop, {}).get("max_iterations", "?")
             print(f"    {loop}: {count}/{bound}")
 
+    if case.reply_repairs:
+        print("  reply repairs:")
+        for role, count in sorted(case.reply_repairs.items()):
+            print(f"    {role}: {count}")
+
     verdict_keys = ["unresolved_law_items", "defective_law_items", "red_line_violated"]
     if any(key in case.facts for key in verdict_keys):
         print("  verdict facts:")

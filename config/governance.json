@@ -20,6 +20,11 @@
       "eta"
     ]
   },
+  "model_replies": {
+    "require_json": true,
+    "max_repair_attempts": 1,
+    "repair_instruction": "reply_with_json_only"
+  },
   "providers": {
     "openai_primary": {
       "interface": "openai_chat_completions",

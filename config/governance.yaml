@@ -19,6 +19,13 @@ long_task:
     - next_step
     - eta
 
+# Model replies must be machine-readable. A repair attempt is a retry, so its
+# ceiling is declared here rather than assumed in code.
+model_replies:
+  require_json: true
+  max_repair_attempts: 1
+  repair_instruction: reply_with_json_only
+
 # Model interfaces the runtime can speak. Declaring a provider does not bind
 # it to a role; role_isolation.<role>.provider does that.
 # api_key_env names an environment variable. Keys never live in this file.

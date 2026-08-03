@@ -101,9 +101,29 @@ JSON shaped `{"facts": {...}, "artifacts": {...}}`, and applies it. The
 executor takes an agency optionally — with none, it is a pure state machine,
 which is what keeps routing testable without a model.
 
-An unreadable reply raises `AgencyError` rather than blocking quietly. A model
-that stopped returning JSON is an operational failure, and a case that merely
-stalls would hide it.
+### When a model does not answer in JSON
+
+Models wrap payloads in prose and code fences constantly, so a reply is
+salvaged before anything else: the raw text, then any fenced block, then the
+outermost braces. That costs no model call and is fully deterministic, so it
+runs first.
+
+If nothing can be salvaged, the role is asked again with its own unusable
+answer quoted back and an explicit format demand. Only the role's own output is
+quoted, so a repair cannot smuggle in material the role may not read.
+
+**A repair is a retry, so it is bounded and declared.** `model_replies.
+max_repair_attempts` sets the ceiling, the validator caps it, and a budget of
+`0` disables repair entirely. An unbounded repair loop would be exactly the
+failure the loop layer exists to prevent, one level down.
+
+Repairs are counted on the case. A role that needed repairing is a fact about
+the run, and a silent retry would hide a model drifting off format. After the
+budget is spent, an unreadable reply still raises `AgencyError` — a case that
+merely stalls would hide the same thing.
+
+Repair recovers the format. It does not widen authority: a repaired reply goes
+through `may_write` exactly like the first one.
 
 ### Write authority is the other half of isolation
 
@@ -269,9 +289,30 @@ rework 迴圈因此能夠收斂。
 執行器可以選擇不帶 agency —— 不帶的時候它就是一台純粹的狀態機，
 這正是讓路由邏輯能在沒有模型的情況下被測試的原因。
 
-無法解析的回覆會拋出 `AgencyError`，而不是安靜地卡住。
-模型不再回傳 JSON 是一種運作失敗，
-如果只是讓案件停住，這個問題就會被藏起來。
+### 當模型不用 JSON 回答時
+
+模型很常把 payload 包在散文和 code fence 裡，
+所以會先嘗試搶救：原始文字、任何 fenced 區塊、最外層的大括號。
+這不花任何一次模型呼叫，而且完全是決定性的，因此擺在最前面。
+
+如果完全搶救不到，才會再問這個角色一次，
+把它自己那份無法使用的回答引述回去，並明確要求格式。
+引述的只有該角色自己的輸出，
+所以修復不可能夾帶該角色不得閱讀的材料。
+
+**修復就是重試，所以它有上限而且是宣告出來的。**
+`model_replies.max_repair_attempts` 設定上限，驗證器會再加一道天花板，
+設成 `0` 則完全關閉修復。
+沒有上限的修復迴圈，正是迴圈層存在要防止的那種失敗，只是低了一層。
+
+修復次數會記在案件上。
+一個需要被修復的角色，是這次執行的一個事實，
+安靜地重試會把「模型正在偏離格式」這件事藏起來。
+額度用完後，無法解析的回覆仍然會拋出 `AgencyError` ——
+只是讓案件停住，同樣會把問題藏起來。
+
+修復救回來的是格式，不是權限：
+修復後的回覆一樣要走 `may_write`，跟第一次完全相同。
 
 ### 寫入權限是角色隔離的另一半
 
