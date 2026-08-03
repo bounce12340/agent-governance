@@ -13,6 +13,7 @@ from typing import Any
 
 from .case import Case
 from .checks import failures as artifact_failures
+from .convergence import check as convergence_check
 from .guards import GUARDS
 
 
@@ -170,6 +171,16 @@ class CaseRunner:
         loop = self.loops[loop_name]
         case.loop_iterations[loop_name] = case.iterations(loop_name) + 1
         count = case.iterations(loop_name)
+
+        # The metric the loop exists to reduce, checked first: a number that
+        # climbed says the pass made things worse, which is a stronger claim
+        # than the paperwork looking familiar.
+        metric_name = loop.get("convergence_metric", "")
+        measured = case.loop_metrics.setdefault(loop_name, [])
+        measured.append(case.fact(metric_name))
+        regression = convergence_check(loop.get("convergence_rule", ""), measured)
+        if regression:
+            return f"did not converge: {metric_name} {regression}"
 
         artifact_name = loop.get("per_iteration_artifact", "")
         seen = case.loop_evidence.setdefault(loop_name, [])

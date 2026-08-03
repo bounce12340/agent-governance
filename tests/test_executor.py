@@ -247,11 +247,17 @@ class LoopBudgetTest(unittest.TestCase):
         self.assertEqual(case.iterations("clarification_loop"), bound + 1)
         self.assertIn(f"exceeded its bound of {bound}", result.note)
 
-    def test_amendment_loop_stops_at_its_declared_bound(self) -> None:
+    def test_amendment_loop_stops_before_its_bound_when_nothing_is_fixed(self) -> None:
+        """Its metric must strictly fall, so a wasted pass ends it early.
+
+        The bound is still there; convergence simply reaches this loop first,
+        which is the point of checking the metric as well as counting passes.
+        """
         bound = CONFIG["loops"]["amendment_loop"]["max_iterations"]
         case, result = self.drive("JUDICIARY", "amendment_reason", defective_law_items=1)
         self.assertEqual(result.status, RunStatus.ESCALATED)
-        self.assertEqual(case.iterations("amendment_loop"), bound + 1)
+        self.assertIn("did not converge", result.note)
+        self.assertLess(case.iterations("amendment_loop"), bound + 1)
 
     def test_no_loop_outruns_its_bound(self) -> None:
         """A sweep, so a loop added later cannot quietly go unbounded."""

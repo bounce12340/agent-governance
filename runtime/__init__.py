@@ -18,6 +18,7 @@ from .adapters import (
 from .agency import AgencyError, RoleAgency
 from .case import Case
 from .checks import CHECKS
+from .convergence import RULES as CONVERGENCE_RULES
 from .checks import failures as artifact_failures
 from .executor import (
     CaseRunner,
@@ -40,6 +41,7 @@ __all__ = [
     "AdapterError",
     "AgencyError",
     "CHECKS",
+    "CONVERGENCE_RULES",
     "AnthropicMessagesAdapter",
     "Case",
     "CaseRunner",

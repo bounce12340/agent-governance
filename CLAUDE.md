@@ -54,7 +54,8 @@ with no secrets and no network — the `stub` interface exists so it can.
 `TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
 `tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py`,
 `tests/test_cli.py`, `tests/test_supervision.py`, `tests/test_checks.py` and
-`tests/test_repair.py`, which are the automated suite.
+`tests/test_repair.py` and `tests/test_convergence.py`, which are the automated
+suite.
 
 ## Architecture: where the governance model actually lives
 
@@ -68,7 +69,7 @@ alone will either break CI or silently desync the docs from the enforced contrac
    `REQUIRED_LONG_TASK_KEYS`, `REQUIRED_PROGRESS_FIELDS`, `ROLE_NAMES`,
    `REQUIRED_LOOP_NAMES`, `REQUIRED_LOOP_KEYS`, `REQUIRED_GRAPH_INVARIANTS`,
    `REQUIRED_EDGE_KEYS`, `REQUIRED_PROVIDER_KEYS`, `KNOWN_INTERFACES`, `KNOWN_GUARDS`,
-   `KNOWN_ARTIFACT_CHECKS`, `REQUIRED_MODEL_REPLY_KEYS`.
+   `KNOWN_ARTIFACT_CHECKS`, `REQUIRED_MODEL_REPLY_KEYS`, `KNOWN_CONVERGENCE_RULES`.
    Adding a workflow state or harness artifact to the config alone does nothing; the
    validator only enforces what is listed here.
 4. **Prose docs** — `docs/state-machine.md` (state list + ASCII diagram),
@@ -78,11 +79,12 @@ alone will either break CI or silently desync the docs from the enforced contrac
    `docs/case-execution.md` (executor semantics), `docs/long-task-supervision.md`
    (checkpoint contract), `CONSTITUTION.md` (non-negotiable rules). These restate the
    config in both languages.
-5. **`runtime/`** — consumes the config at run time and hardcodes none of the flow. Three
+5. **`runtime/`** — consumes the config at run time and hardcodes none of the flow. Four
    registries must stay equal to validator constants, each asserted by a test so drift
    fails CI rather than surfacing at run time: `runtime/adapters.py:INTERFACES` mirrors
-   `KNOWN_INTERFACES`, `runtime/guards.py:GUARDS` mirrors `KNOWN_GUARDS`, and
-   `runtime/checks.py:CHECKS` mirrors `KNOWN_ARTIFACT_CHECKS`. Adding a `graph.edges`
+   `KNOWN_INTERFACES`, `runtime/guards.py:GUARDS` mirrors `KNOWN_GUARDS`,
+   `runtime/checks.py:CHECKS` mirrors `KNOWN_ARTIFACT_CHECKS`, and
+   `runtime/convergence.py:RULES` mirrors `KNOWN_CONVERGENCE_RULES`. Adding a `graph.edges`
    entry therefore usually means adding a guard implementation too.
 
 **Changing the state machine touches all of these at once.** Adding a transition can create
