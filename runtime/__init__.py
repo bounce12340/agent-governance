@@ -28,6 +28,7 @@ from .executor import (
     StepResult,
 )
 from .guards import GUARDS
+from .operators import AuthError, Operator, OperatorRegistry
 from .roles import IsolationError, RoleSession
 from .session import GovernanceSession
 from .supervision import (
@@ -40,6 +41,7 @@ from .supervision import (
 __all__ = [
     "AdapterError",
     "AgencyError",
+    "AuthError",
     "CHECKS",
     "CONVERGENCE_RULES",
     "AnthropicMessagesAdapter",
@@ -53,6 +55,8 @@ __all__ = [
     "IsolationError",
     "MissingCredential",
     "ModelAdapter",
+    "Operator",
+    "OperatorRegistry",
     "NondeterministicRouting",
     "OpenAIChatCompletionsAdapter",
     "RoleAgency",

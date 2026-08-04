@@ -31,6 +31,21 @@ model_replies:
   max_repair_attempts: 1
   repair_instruction: reply_with_json_only
 
+# Who may act on behalf of which role over the network. A token is never
+# written here — only the name of the environment variable holding it, the
+# same rule providers follow. An operator can never act as a role it does not
+# list, so the HTTP surface cannot be wider than role isolation allows.
+operators:
+  intake_bot:
+    token_env: AI_GOV_TOKEN_INTAKE
+    may_act_as: [legislative]
+  build_bot:
+    token_env: AI_GOV_TOKEN_BUILD
+    may_act_as: [executive]
+  reviewer:
+    token_env: AI_GOV_TOKEN_REVIEWER
+    may_act_as: [judiciary]
+
 # Model interfaces the runtime can speak. Declaring a provider does not bind
 # it to a role; role_isolation.<role>.provider does that.
 # api_key_env names an environment variable. Keys never live in this file.

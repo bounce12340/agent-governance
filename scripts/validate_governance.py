@@ -691,6 +691,43 @@ def validate_evidence_is_producible(doc: dict[str, Any], errors: list[str]) -> N
                 )
 
 
+def validate_operators(doc: dict[str, Any], errors: list[str]) -> None:
+    """Operators may only act as roles that exist, and never share a token.
+
+    An operator listing a role the framework does not have is an authorisation
+    rule that can never be satisfied; two operators sharing one token variable
+    are indistinguishable, which defeats the point of naming them separately.
+    """
+    operators = as_mapping(doc.get("operators"), "operators", errors)
+    if not operators:
+        errors.append("operators must declare at least one operator")
+        return
+
+    seen_tokens: dict[str, str] = {}
+    for name in sorted(operators):
+        label = f"operators.{name}"
+        operator = as_mapping(operators.get(name), label, errors)
+        if not operator:
+            continue
+
+        token_env = operator.get("token_env")
+        if not isinstance(token_env, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]*", token_env):
+            errors.append(f"{label}.token_env must be an environment variable name")
+        elif token_env in seen_tokens:
+            errors.append(
+                f"{label}.token_env is already used by operators.{seen_tokens[token_env]}"
+            )
+        else:
+            seen_tokens[token_env] = name
+
+        roles = as_list(operator.get("may_act_as"), f"{label}.may_act_as", errors)
+        if not roles:
+            errors.append(f"{label}.may_act_as must not be empty")
+        unknown = sorted({str(role) for role in roles} - ROLE_NAMES)
+        if unknown:
+            errors.append(f"{label}.may_act_as has undeclared roles: {', '.join(unknown)}")
+
+
 def validate_model_replies(doc: dict[str, Any], errors: list[str]) -> None:
     replies = as_mapping(doc.get("model_replies"), "model_replies", errors)
     if not replies:
@@ -936,6 +973,7 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
     identities = validate_providers(doc, errors)
     validate_role_providers(doc, identities, errors)
     validate_model_replies(doc, errors)
+    validate_operators(doc, errors)
     validate_evidence_is_producible(doc, errors)
     validate_write_authority(doc, errors)
     validate_state_roles(doc, state_set, errors)

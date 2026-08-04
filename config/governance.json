@@ -28,6 +28,26 @@
     "max_repair_attempts": 1,
     "repair_instruction": "reply_with_json_only"
   },
+  "operators": {
+    "intake_bot": {
+      "token_env": "AI_GOV_TOKEN_INTAKE",
+      "may_act_as": [
+        "legislative"
+      ]
+    },
+    "build_bot": {
+      "token_env": "AI_GOV_TOKEN_BUILD",
+      "may_act_as": [
+        "executive"
+      ]
+    },
+    "reviewer": {
+      "token_env": "AI_GOV_TOKEN_REVIEWER",
+      "may_act_as": [
+        "judiciary"
+      ]
+    }
+  },
   "providers": {
     "openai_primary": {
       "interface": "openai_chat_completions",
