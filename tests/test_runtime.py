@@ -113,6 +113,62 @@ class CredentialTest(unittest.TestCase):
             StubAdapter(name="offline_stub", model="stub").build_request("SYS", "PROMPT")
 
 
+class ModelOverrideTest(unittest.TestCase):
+    """A model id in the config is a default, not a fact. Vendors retire them."""
+
+    def build(self, **override) -> OpenAIChatCompletionsAdapter:
+        provider = {
+            "interface": "openai_chat_completions",
+            "model": "configured-model",
+            "base_url": "https://example.invalid/v1",
+            "api_key_env": "TEST_OPENAI_KEY",
+            "model_env": "TEST_MODEL_OVERRIDE",
+        }
+        provider.update(override)
+        return build_adapter("test_openai", provider)
+
+    def test_the_config_value_is_used_when_nothing_overrides_it(self) -> None:
+        os.environ.pop("TEST_MODEL_OVERRIDE", None)
+        adapter = self.build()
+        self.assertEqual(adapter.model, "configured-model")
+        self.assertEqual(adapter.model_source, "config")
+
+    def test_the_environment_wins_when_set(self) -> None:
+        os.environ["TEST_MODEL_OVERRIDE"] = "newer-model"
+        self.addCleanup(os.environ.pop, "TEST_MODEL_OVERRIDE", None)
+        adapter = self.build()
+        self.assertEqual(adapter.model, "newer-model")
+        self.assertEqual(adapter.model_source, "TEST_MODEL_OVERRIDE")
+
+    def test_an_empty_override_falls_back_rather_than_sending_nothing(self) -> None:
+        """An unset variable and an empty one mean the same thing to a shell."""
+        os.environ["TEST_MODEL_OVERRIDE"] = ""
+        self.addCleanup(os.environ.pop, "TEST_MODEL_OVERRIDE", None)
+        adapter = self.build()
+        self.assertEqual(adapter.model, "configured-model")
+
+    def test_a_provider_may_decline_an_override(self) -> None:
+        os.environ["TEST_MODEL_OVERRIDE"] = "newer-model"
+        self.addCleanup(os.environ.pop, "TEST_MODEL_OVERRIDE", None)
+        adapter = self.build(model_env=None)
+        self.assertEqual(adapter.model, "configured-model")
+
+    def test_the_override_reaches_the_wire(self) -> None:
+        os.environ["TEST_MODEL_OVERRIDE"] = "newer-model"
+        os.environ["TEST_OPENAI_KEY"] = "not-a-real-key"
+        self.addCleanup(os.environ.pop, "TEST_MODEL_OVERRIDE", None)
+        self.addCleanup(os.environ.pop, "TEST_OPENAI_KEY", None)
+        _, _, body = self.build().build_request("SYS", "PROMPT")
+        self.assertEqual(json.loads(body)["model"], "newer-model")
+
+    def test_the_report_says_where_the_model_came_from(self) -> None:
+        os.environ["OPENAI_MODEL"] = "newer-model"
+        self.addCleanup(os.environ.pop, "OPENAI_MODEL", None)
+        rows = {row["role"]: row for row in GovernanceSession(copy.deepcopy(CONFIG)).report()}
+        self.assertEqual(rows["executive"]["model_source"], "OPENAI_MODEL")
+        self.assertEqual(rows["legislative"]["model_source"], "config")
+
+
 class RoleIsolationTest(unittest.TestCase):
     def make_role(self, role: str) -> RoleSession:
         cfg = CONFIG["role_isolation"][role]
@@ -211,6 +267,22 @@ class ConfigContractTest(unittest.TestCase):
             lambda d: d["providers"]["openai_primary"].__setitem__("interface", "carrier_pigeon")
         )
         self.assertTrue(any("interface must be one of" in e for e in errors), errors)
+
+    def test_a_literal_model_id_in_model_env_is_rejected(self) -> None:
+        errors = self.mutated(
+            lambda d: d["providers"]["openai_primary"].__setitem__("model_env", "gpt-4o")
+        )
+        self.assertTrue(any("model_env" in e for e in errors), errors)
+
+    def test_a_provider_may_declare_no_override(self) -> None:
+        errors = self.mutated(
+            lambda d: d["providers"]["openai_primary"].__setitem__("model_env", None)
+        )
+        self.assertEqual(errors, [])
+
+    def test_a_provider_missing_model_env_entirely_is_rejected(self) -> None:
+        errors = self.mutated(lambda d: d["providers"]["openai_primary"].pop("model_env"))
+        self.assertTrue(any("model_env" in e for e in errors), errors)
 
     def test_known_interfaces_match_the_runtime_registry(self) -> None:
         from runtime.adapters import INTERFACES

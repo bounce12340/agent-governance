@@ -38,9 +38,15 @@ class ModelAdapter:
         api_key_env: str | None = None,
         timeout_seconds: int = 60,
         max_output_tokens: int = 4096,
+        model_env: str | None = None,
     ) -> None:
         self.name = name
-        self.model = model
+        # The config value is a default. Vendors rename and retire model ids,
+        # so a deployment can override without editing a governance file.
+        self.model_env = model_env
+        override = os.environ.get(model_env) if model_env else None
+        self.model = override or model
+        self.model_source = model_env if override else "config"
         self.base_url = base_url.rstrip("/") if base_url else None
         self.api_key_env = api_key_env
         self.timeout_seconds = timeout_seconds
@@ -210,4 +216,5 @@ def build_adapter(name: str, provider: dict[str, Any]) -> ModelAdapter:
         api_key_env=provider.get("api_key_env"),
         timeout_seconds=int(provider.get("timeout_seconds", 60)),
         max_output_tokens=int(provider.get("max_output_tokens", 4096)),
+        model_env=provider.get("model_env"),
     )

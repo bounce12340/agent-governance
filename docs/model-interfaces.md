@@ -41,6 +41,7 @@ providers:
     interface: openai_chat_completions
     base_url: https://api.openai.com/v1
     model: gpt-4o
+    model_env: OPENAI_MODEL
     api_key_env: OPENAI_API_KEY
     timeout_seconds: 60
     max_output_tokens: 4096
@@ -48,6 +49,20 @@ providers:
 
 `model` is whatever identifier your account or server exposes; these move, so
 treat the shipped values as examples and set your own.
+
+`model_env` names an environment variable that overrides `model` at run time,
+or `null` for a provider that declines overrides. A model id is a **default,
+not a fact**: vendors rename and retire them, and a deployment that has to edit
+a governance file to keep working will eventually edit it carelessly. The
+validator applies the same rule as `api_key_env` — the value must look like a
+variable name, so a model id written there is rejected.
+
+The override is reported rather than hidden. `python3 -m runtime` prints
+`model=gpt-5-turbo (OPENAI_MODEL)` when the environment won and
+`model=gpt-4o (config)` when it did not, so the wiring readout always says
+which model will actually be called. An empty variable counts as unset — a
+shell exporting an empty string means "not configured", not "call the empty
+model".
 
 `api_key_env` names an **environment variable**. It is never the key itself —
 the validator rejects any value that does not look like a variable name, since
@@ -135,6 +150,7 @@ providers:
     interface: openai_chat_completions
     base_url: https://api.openai.com/v1
     model: gpt-4o
+    model_env: OPENAI_MODEL
     api_key_env: OPENAI_API_KEY
     timeout_seconds: 60
     max_output_tokens: 4096
@@ -142,6 +158,20 @@ providers:
 
 `model` 填你的帳號或伺服器實際提供的識別字串；
 這些名稱會變動，請把 repo 內附的值當成範例，換成你自己的。
+
+`model_env` 填一個環境變數名稱，執行時會覆蓋 `model`；
+不接受覆蓋的 provider 就填 `null`。
+模型 id 是**預設值，不是事實**：廠商會改名、會下架，
+而一個必須改治理設定檔才能繼續運作的部署，遲早會有人隨手亂改。
+驗證器對它套用跟 `api_key_env` 一樣的規則 ——
+值必須看起來像變數名稱，所以把模型 id 寫在這裡會被拒絕。
+
+覆蓋的結果會被報告出來，而不是悄悄生效。
+環境變數贏的時候，`python3 -m runtime` 會印
+`model=gpt-5-turbo (OPENAI_MODEL)`；沒贏的時候印 `model=gpt-4o (config)`，
+所以接線報告永遠說得出實際會被呼叫的是哪個模型。
+空字串等同於沒設定 —— shell 匯出一個空字串的意思是「沒設定」，
+不是「呼叫一個叫做空字串的模型」。
 
 `api_key_env` 填的是**環境變數名稱**，絕對不是金鑰本身 ——
 驗證器會拒絕任何看起來不像變數名稱的值，

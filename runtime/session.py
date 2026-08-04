@@ -70,6 +70,7 @@ class GovernanceSession:
                     "provider": adapter.name,
                     "interface": adapter.interface,
                     "model": adapter.model,
+                    "model_source": adapter.model_source,
                     "base_url": adapter.base_url or "-",
                     "credential": "set" if adapter.credential_present() else "missing",
                 }
@@ -86,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Governance runtime wiring from {path}\n")
     for row in session.report():
         print(f"  {row['role']:<12} {row['provider']:<24} {row['interface']}")
-        print(f"  {'':<12} model={row['model']}  endpoint={row['base_url']}")
+        print(f"  {'':<12} model={row['model']} ({row['model_source']})  endpoint={row['base_url']}")
         print(f"  {'':<12} credential={row['credential']}\n")
 
     missing = [row["role"] for row in session.report() if row["credential"] == "missing"]

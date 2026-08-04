@@ -115,6 +115,7 @@ REQUIRED_PROVIDER_KEYS = {
     "interface",
     "base_url",
     "model",
+    "model_env",
     "api_key_env",
     "timeout_seconds",
     "max_output_tokens",
@@ -554,6 +555,14 @@ def validate_providers(doc: dict[str, Any], errors: list[str]) -> dict[str, tupl
             value = provider.get(key)
             if not isinstance(value, int) or value < 1:
                 errors.append(f"{label}.{key} must be a positive integer")
+
+        # A model id is a default, not a fact: vendors rename and retire them.
+        # Naming an override variable is allowed; naming a model id there is not.
+        model_env = provider.get("model_env")
+        if model_env is not None and (
+            not isinstance(model_env, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]*", model_env)
+        ):
+            errors.append(f"{label}.model_env must be an environment variable name or null")
 
         base_url = provider.get("base_url")
         api_key_env = provider.get("api_key_env")
