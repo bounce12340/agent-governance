@@ -35,7 +35,7 @@ from runtime.supervision import (  # noqa: E402
     SupervisionError,
 )
 
-from .store import Store, StoreError  # noqa: E402
+from .store import ConflictError, Store, StoreError  # noqa: E402
 
 # Exit codes are part of the interface: a pipeline should be able to branch on
 # the verdict without parsing prose.
@@ -44,6 +44,7 @@ EXIT_USAGE = 1
 EXIT_BLOCKED = 2
 EXIT_REJECTED = 3
 EXIT_ESCALATED = 4
+EXIT_CONFLICT = 5
 
 VERDICT_EXIT = {
     "PASSED": EXIT_OK,
@@ -411,6 +412,9 @@ def main(argv: list[str] | None = None) -> int:
     store = Store(args.store)
     try:
         return args.handler(args, session, store)
+    except ConflictError as exc:
+        print(f"CONFLICT: {exc}", file=sys.stderr)
+        return EXIT_CONFLICT
     except StoreError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_USAGE

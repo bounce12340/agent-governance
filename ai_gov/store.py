@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,30 @@ ID_PATTERN = re.compile(r"^[A-Z]+-(\d+)$")
 
 class StoreError(RuntimeError):
     pass
+
+
+class ConflictError(StoreError):
+    """Someone else wrote this case since it was read.
+
+    Refused rather than overwritten. Two operators changing one case at once is
+    a governance event — silently keeping the last write would erase whichever
+    decision lost the race, and the audit trail would not show that it
+    happened.
+    """
+
+
+def write_atomically(path: Path, text: str) -> None:
+    """Write via a temp file and rename, so a reader never sees half a record."""
+    handle, temporary = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 class Store:
@@ -57,8 +82,9 @@ class Store:
             "acceptance_criteria": list(metrics),
             "red_lines": list(red_lines),
         }
-        (self.laws / f"{law_id}.json").write_text(
-            json.dumps(law, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        write_atomically(
+            self.laws / f"{law_id}.json",
+            json.dumps(law, indent=2, ensure_ascii=False) + "\n",
         )
         return law
 
@@ -74,11 +100,37 @@ class Store:
         self.prepare()
         return self.next_id("CASE", self.cases)
 
+    def stored_version(self, case_id: str) -> int | None:
+        path = self.cases / f"{case_id}.json"
+        if not path.exists():
+            return None
+        return int(json.loads(path.read_text(encoding="utf-8")).get("version") or 0)
+
     def save_case(self, case: Case) -> None:
+        """Compare-and-set on the case's version, then write atomically.
+
+        The version the case was loaded with must still be the one on disk. If
+        it is not, another writer got there first and this write is refused.
+        """
         self.prepare()
-        (self.cases / f"{case.case_id}.json").write_text(
-            json.dumps(case.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        on_disk = self.stored_version(case.case_id)
+        if on_disk is not None and on_disk != case.version:
+            raise ConflictError(
+                f"{case.case_id} changed underneath this write: "
+                f"loaded version {case.version}, on disk {on_disk}"
+            )
+        case.version += 1
+        try:
+            write_atomically(
+                self.cases / f"{case.case_id}.json",
+                json.dumps(case.to_dict(), indent=2, ensure_ascii=False) + "\n",
+            )
+        except BaseException:
+            # Leave the in-memory case matching what is actually stored, so a
+            # caller that retries is not comparing against a version that never
+            # reached disk.
+            case.version -= 1
+            raise
 
     def load_case(self, case_id: str) -> Case:
         path = self.cases / f"{case_id}.json"

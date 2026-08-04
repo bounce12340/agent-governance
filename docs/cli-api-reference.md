@@ -123,6 +123,7 @@ prose.
 | `2` | the case is blocked — incomplete harness evidence, or an overdue checkpoint |
 | `3` | the case reached `REJECTED` |
 | `4` | a loop stagnated and escalated, or checkpoints passed the miss ceiling |
+| `5` | the record changed underneath the write, which was refused |
 
 ### Writes are bound by role authority
 
@@ -131,6 +132,20 @@ Each command acts on behalf of one role and goes through that role's
 `judge run` write as the judiciary. An operator at a terminal is standing in
 for a role and cannot do what that role could not — otherwise the CLI would be
 a hole straight through role isolation.
+
+### Concurrent writes are refused, not merged
+
+Every case carries a `version`. A write asserts the version it was loaded with
+is still the one on disk; if another writer got there first, the write is
+refused with exit code `5` and the caller reloads and retries.
+
+Silently keeping the last write would erase whichever decision lost the race,
+and the audit trail would not show that it happened. Two operators changing one
+case at once is a governance event, so it is reported as one.
+
+Records are written to a temporary file in the destination directory and then
+renamed, so a reader never sees half a record and a crash mid-write leaves the
+previous one intact.
 
 ### API shape (proposed)
 
@@ -338,6 +353,7 @@ ai-gov case list
 | `2` | 案件被擋住 —— harness 證據不完整，或 checkpoint 逾期 |
 | `3` | 案件走到 `REJECTED` |
 | `4` | 某個迴圈停滯並升級，或 checkpoint 漏報超過上限 |
+| `5` | 紀錄在這次寫入之前被別人改過，寫入遭拒 |
 
 ### 寫入受角色權限約束
 
@@ -346,6 +362,20 @@ ai-gov case list
 終端機前的操作者是代替某個角色行動，
 不能做到那個角色做不到的事 ——
 否則這個 CLI 就是直接貫穿角色隔離的一個洞。
+
+### 併發寫入會被拒絕，不會被合併
+
+每個案件都帶著一個 `version`。
+寫入時會主張「讀進來的版本仍然是磁碟上的版本」；
+如果有別的寫入者先到，這次寫入就會被拒絕，結束碼 `5`，
+呼叫方重新載入後再試。
+
+安靜地保留最後一次寫入，等於抹掉在競爭中落敗的那個決定，
+而稽核軌跡上完全看不出這件事發生過。
+兩個操作者同時改同一個案件是一個治理事件，所以它會被當成事件回報。
+
+紀錄會先寫到目標目錄下的暫存檔再改名，
+因此讀取者永遠不會看到半份紀錄，寫到一半當掉也不會毀掉前一份。
 
 ### API 形式（提案中）
 

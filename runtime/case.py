@@ -30,6 +30,7 @@ class Case:
     checkpoints: list[dict[str, Any]] = field(default_factory=list)
     last_checkpoint_at: float | None = None
     missed_checkpoints: int = 0
+    version: int = 0
 
     def fact(self, name: str, default: Any = 0) -> Any:
         return self.facts.get(name, default)
@@ -77,6 +78,7 @@ class Case:
             "checkpoints": self.checkpoints,
             "last_checkpoint_at": self.last_checkpoint_at,
             "missed_checkpoints": self.missed_checkpoints,
+            "version": self.version,
         }
 
     @classmethod
@@ -96,6 +98,7 @@ class Case:
             checkpoints=data.get("checkpoints") or [],
             last_checkpoint_at=data.get("last_checkpoint_at"),
             missed_checkpoints=data.get("missed_checkpoints") or 0,
+            version=data.get("version") or 0,
         )
 
     def trail(self) -> str:
