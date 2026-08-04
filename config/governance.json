@@ -20,6 +20,9 @@
       "eta"
     ]
   },
+  "intake_artifacts": [
+    "user_request"
+  ],
   "model_replies": {
     "require_json": true,
     "max_repair_attempts": 1,
