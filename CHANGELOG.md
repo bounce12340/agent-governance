@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented here.
 
-## Unreleased
+## 1.1.0 - 2026-08-04
 
-### Added (Unreleased)
+### Added (1.1.0)
 
 - Bilingual README
 - Technical docs for state machine and CLI/API reference
@@ -67,7 +67,7 @@ All notable changes to this project will be documented here.
 - Offline runtime test suite and a third CI job that runs it without secrets
 - `CLAUDE.md` guidance for Claude Code
 
-### Changed
+### Changed (1.1.0)
 
 - README rewritten into a cleaner technical-doc style
 - Documentation structure expanded
