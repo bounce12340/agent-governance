@@ -8,10 +8,13 @@ Mostly a specification-and-documentation repo for a multi-agent AI governance fr
 (separation of powers: legislative / executive / judiciary, plus a harness evidence gate).
 
 Three things are executable: `scripts/validate_governance.py` (config validator), `runtime/`
-(binds roles to model interfaces and executes the state machine), and `ai_gov/` (the
-`ai-gov` CLI, run via `./bin/ai-gov` or `python3 -m ai_gov`). Everything else is spec — in
-particular the `POST /laws`-style REST endpoints in `docs/cli-api-reference.md` remain a
-*proposed* surface with no implementation.
+(binds roles to model interfaces and executes the state machine), and `ai_gov/` — the
+`ai-gov` CLI (`./bin/ai-gov` or `python3 -m ai_gov`) plus `ai_gov/api.py`, a WSGI
+application exposing the same flow over HTTP. Everything else is spec.
+
+`ai_gov/api.py` deliberately ships no server: `create_app()` returns a WSGI callable and
+the deployment brings its own gunicorn/uWSGI/waitress. `python3 -m ai_gov.api` runs
+`wsgiref.simple_server` for local development only — single-threaded, no TLS.
 
 ## Commands
 
@@ -35,6 +38,10 @@ python3 -m runtime
 ./bin/ai-gov law create --title "T" --metric "M" --redline "R"
 ./bin/ai-gov judge run --case CASE-001 --unresolved 0
 
+# The HTTP API. Development only — no TLS, single-threaded.
+AI_GOV_TOKEN_REVIEWER=dev-token python3 -m ai_gov.api
+curl -H "Authorization: Bearer dev-token" http://127.0.0.1:8080/cases/CASE-001
+
 # Lint markdown exactly as CI does
 npx --yes markdownlint-cli2 "**/*.md" "!node_modules"
 
@@ -45,7 +52,8 @@ npx --yes markdownlint-cli2 README.md
 Validator exit codes: `0` pass, `1` file not found, `2` parse failure, `3` validation errors
 (each error printed as a `- <message>` line). `python3 -m runtime` exits `1` if any
 credential is missing. `ai-gov` exit codes: `0` ok/`PASSED`, `1` usage or refused write,
-`2` blocked, `3` `REJECTED`, `4` escalated — documented in `docs/cli-api-reference.md`.
+`2` blocked, `3` `REJECTED`, `4` escalated, `5` write conflict — documented in
+`docs/cli-api-reference.md`.
 
 CI (`.github/workflows/ci.yml`) runs three jobs on push/PR to `main`: markdownlint over all
 `**/*.md`, the validator against both configs, and the runtime tests. The runtime job runs
@@ -53,9 +61,11 @@ with no secrets and no network — the `stub` interface exists so it can.
 
 `TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
 `tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py`,
-`tests/test_cli.py`, `tests/test_supervision.py`, `tests/test_checks.py` and
-`tests/test_repair.py` and `tests/test_convergence.py`, which are the automated
-suite.
+`tests/test_cli.py`, `tests/test_supervision.py`, `tests/test_checks.py`,
+`tests/test_repair.py`, `tests/test_convergence.py`, `tests/test_evidence.py`,
+`tests/test_store.py`, `tests/test_operators.py` and `tests/test_api.py`, which are the
+automated suite. `test_api.py` opens no socket — a WSGI app is a callable, so it is
+exercised directly.
 
 ## Architecture: where the governance model actually lives
 
@@ -112,8 +122,10 @@ checks reachability from `NEW` and reverse reachability to a terminal state, req
 `loops.checkpoint_loop.max_iterations` against `long_task.max_missed_checkpoints`, and
 `loops.checkpoint_loop.escalation_target` against `long_task.escalation_on_miss`.
 
-For providers it enforces that `api_key_env` looks like an environment variable name rather
-than a literal key, that non-`stub` interfaces carry an `http(s)://` `base_url`, and that no
+For providers it enforces that `api_key_env` and `model_env` look like environment variable
+names rather than literal values (`model_env` may also be `null`, meaning the provider
+declines run-time model overrides), that non-`stub` interfaces carry an `http(s)://`
+`base_url`, and that no
 two roles resolve to the same `(interface, base_url, model)` triple — that last one is what
 turns `model: separate` from a claim into a constraint, so **at least two distinct model
 configurations are required** for any valid config.
@@ -125,6 +137,15 @@ least one implemented entry in `harness.artifact_checks`, and that
 `model_replies.max_repair_attempts` is a non-negative integer no greater than
 `MAX_REPAIR_CEILING` — a repair round trip is a retry, and this repo does not allow
 unbounded ones.
+
+Two more checks close gaps the graph invariants leave open. **Evidence must be
+producible**: every `required_evidence` and every `per_iteration_artifact` must appear in
+some role's `may_write` or in `intake_artifacts`, because an edge demanding evidence nobody
+can write is reachable on paper and impassable in practice. `intake_artifacts` exists for
+`user_request`, which has no author inside the system (`NEW` declares no acting role), and
+an artifact may be intake or role-written, never both. **Operators must be resolvable**:
+each `operators.<name>` declares a `token_env` variable name (never a token), a
+`may_act_as` list of declared roles only, and no two operators may share one variable.
 
 These mirror the constitution's structural rules — harness before judgment, capped rework,
 role isolation, two-way feedback channels. Loosening one in the config without changing

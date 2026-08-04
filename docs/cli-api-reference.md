@@ -2,8 +2,9 @@
 
 ## English
 
-The CLI below is implemented. The HTTP API further down is not — it is still a
-proposed shape.
+Both surfaces below are implemented: the `ai-gov` CLI, and an HTTP API shipped
+as a WSGI application. They write through the same role authority and the same
+record store, so neither is a way around the other.
 
 ### Running it
 
@@ -137,7 +138,7 @@ a hole straight through role isolation.
 
 Every case carries a `version`. A write asserts the version it was loaded with
 is still the one on disk; if another writer got there first, the write is
-refused with exit code `5` and the caller reloads and retries.
+refused with exit code `5` (HTTP `409`) and the caller reloads and retries.
 
 Silently keeping the last write would erase whichever decision lost the race,
 and the audit trail would not show that it happened. Two operators changing one
@@ -147,82 +148,164 @@ Records are written to a temporary file in the destination directory and then
 renamed, so a reader never sees half a record and a crash mid-write leaves the
 previous one intact.
 
-### API shape (proposed)
+### The HTTP API
 
-The HTTP surface below is **not implemented**. It is recorded here as the
-intended shape, and supports amendment and clarification requests so the flow
-is not strictly one-way.
+`ai_gov/api.py` exports `create_app()`, which returns a WSGI application. There
+is no bundled server: WSGI is already in the standard library, so a deployment
+uses the server it already runs.
+
+```bash
+gunicorn 'ai_gov.api:create_app()'      # or uWSGI, waitress, mod_wsgi
+python3 -m ai_gov.api                   # development only, see below
+```
+
+`python3 -m ai_gov.api` serves on `wsgiref.simple_server`, which is
+single-threaded and has no TLS. **Do not run it in production** — every
+operator token would cross the wire in clear text. It exists so the endpoints
+can be exercised locally without installing anything.
+
+#### Operators (English)
+
+The CLI can treat filesystem access as its authorisation: whoever can run the
+binary can already read the store. HTTP has no such boundary, so every request
+names an operator with a bearer token:
+
+```yaml
+operators:
+  reviewer:
+    token_env: AI_GOV_TOKEN_REVIEWER
+    may_act_as: [judiciary]
+```
+
+`token_env` names an environment variable, never a token — the same rule
+providers follow for keys. An operator may only act as the roles it lists, so
+the HTTP surface can never be wider than role isolation allows. Two operators
+may not share one variable: indistinguishable operators defeat the point of
+naming them separately.
+
+```http
+Authorization: Bearer $AI_GOV_TOKEN_REVIEWER
+```
+
+Every configured operator is compared in constant time, and an operator whose
+variable is unset can never match — an absent credential must not authenticate
+as an absent token. A refusal never says which token was close.
 
 #### POST /laws (English)
 
-Create a law.
+Create a law. Acts as **legislative**.
 
-Request fields:
-
-- `title`
-- `acceptance_criteria`
-- `red_lines`
+```json
+{"title": "App Launch Law",
+ "acceptance_criteria": ["30 survey responses", "5 interviews"],
+ "red_lines": ["no missing privacy policy"]}
+```
 
 #### POST /cases (English)
 
-Create a case from a law.
+Open a case under a law. Acts as **legislative**.
 
-Request fields:
+```json
+{"law_id": "LAW-001", "name": "Habit App MVP", "request": "Build a habit tracker"}
+```
 
-- `law_id`
-- `scope`
-- `artifacts`
+`request` is intake, not a role's write: `NEW` declares no acting role, so the
+original request has no author inside the system. It defaults to `name`.
 
 #### POST /harnesses (English)
 
-Submit a harness bundle.
+Submit evidence. Acts as **executive**.
 
-Request fields:
+```json
+{"case_id": "CASE-001",
+ "artifacts": {"test_plan": "30 responses, 5 interviews",
+               "evidence_bundle": "survey export, 31 rows"}}
+```
 
-- `case_id`
-- `test_plan`
-- `evidence_bundle`
-- `failure_mode_notes`
+The response reports which required artifacts are still missing and which
+present ones fail their mechanical checks, with the config's verdict for each.
+Hollow evidence is recorded rather than refused — an artifact that says nothing
+is still something the executive submitted. An artifact outside executive
+authority is `403`.
 
 #### POST /judgments (English)
 
-Verify a case.
+Verify a case. Acts as **judiciary**.
 
-Request fields:
+```json
+{"case_id": "CASE-001", "unresolved_law_items": 0}
+```
 
-- `case_id`
-- `evidence`
-- `result`
+**There is no `result` field, and sending one is `422`.** A judgment is a
+request, not an assertion: the client submits the facts a verdict is derived
+from, the server runs the executor, and the response reports where the graph
+ended up. A caller able to post `result: "PASSED"` would make every guard, loop
+bound and evidence requirement in this repo decorative.
+
+A verdict source is required, exactly as on the CLI: either `with_models: true`
+or at least one of `unresolved_law_items`, `defective_law_items`,
+`red_line_violated`. With neither, the case would route to `PASSED` on default
+values.
+
+A `REJECTED` verdict is a successful request. The verdict is in the body;
+using an HTTP error for it would conflate "the system refused to answer" with
+"the system answered no".
 
 #### POST /law-amendments (English)
 
-Request a law amendment.
+Request a law amendment. Acts as **judiciary**.
 
-Request fields:
+```json
+{"case_id": "CASE-001", "reason": "The law needs a crash threshold",
+ "proposed_changes": ["state a crash rate"]}
+```
 
-- `case_id`
-- `reason`
-- `proposed_changes`
+`proposed_changes` is folded into the `amendment_reason` artifact rather than
+written as its own key: the judiciary's `may_write` has no such key, and the
+HTTP layer must not widen a role's authority by inventing one.
 
 #### POST /law-clarifications (English)
 
-Request law clarification.
+Request law clarification. Acts as **executive**.
 
-Request fields:
+```json
+{"case_id": "CASE-001", "reason": "The acceptance criteria are ambiguous"}
+```
 
-- `case_id`
-- `reason`
-- `ambiguity_notes`
+#### GET /cases/{id} (English)
+
+The audit view: state, route taken, harness coverage, loop usage against each
+bound, repair counts, checkpoint counts and recorded verdict facts. Any
+authenticated operator may read it.
+
+It returns **no artifact contents**. Handing back evidence text would need a
+role-scoped read, and this layer knows which operator is asking, not which role.
 
 ### Response model
 
+Every response carries the same three keys, plus per-endpoint detail:
+
 ```json
 {
-  "id": "LAW-001",
-  "status": "passed",
-  "summary": "All criteria satisfied"
+  "id": "CASE-001",
+  "status": "PASSED",
+  "summary": "case ended at PASSED"
 }
 ```
+
+Errors use the same shape with `"status": "error"` and the reason in `summary`.
+
+| Code | Meaning |
+| --- | --- |
+| `200` / `201` | the request succeeded; a verdict, if any, is in the body |
+| `400` | the body is not valid JSON |
+| `401` | no bearer token, or no operator matched it |
+| `403` | the operator may not act as that role, or the role may not write that key |
+| `404` | no such law, case, or endpoint |
+| `405` | wrong method; the `Allow` header says which are accepted |
+| `409` | the record changed underneath the write, which was refused |
+| `413` | the body is over 1 MiB |
+| `422` | the body is well-formed JSON but not a usable request |
 
 ### Recommended evidence
 
@@ -235,7 +318,9 @@ Request fields:
 
 ## 繁體中文
 
-以下的 CLI 已經實作完成。再下面的 HTTP API 尚未實作，只是預定的形式。
+底下兩個介面都已經實作：`ai-gov` CLI，以及以 WSGI 應用形式出貨的 HTTP API。
+兩者透過同一套角色權限、寫進同一份紀錄庫，
+所以誰都不是繞過對方的後門。
 
 ### 如何執行
 
@@ -367,8 +452,8 @@ ai-gov case list
 
 每個案件都帶著一個 `version`。
 寫入時會主張「讀進來的版本仍然是磁碟上的版本」；
-如果有別的寫入者先到，這次寫入就會被拒絕，結束碼 `5`，
-呼叫方重新載入後再試。
+如果有別的寫入者先到，這次寫入就會被拒絕，
+結束碼 `5`（HTTP `409`），呼叫方重新載入後再試。
 
 安靜地保留最後一次寫入，等於抹掉在競爭中落敗的那個決定，
 而稽核軌跡上完全看不出這件事發生過。
@@ -377,81 +462,167 @@ ai-gov case list
 紀錄會先寫到目標目錄下的暫存檔再改名，
 因此讀取者永遠不會看到半份紀錄，寫到一半當掉也不會毀掉前一份。
 
-### API 形式（提案中）
+### HTTP API
 
-以下的 HTTP 介面**尚未實作**，這裡記錄的是預定形式。
-它會支援修法與澄清請求，讓流程不是單向線性。
+`ai_gov/api.py` 匯出 `create_app()`，回傳一個 WSGI 應用。
+這裡不附伺服器：WSGI 本來就在標準函式庫裡，
+部署的人用自己已經在跑的伺服器就好。
+
+```bash
+gunicorn 'ai_gov.api:create_app()'      # 或 uWSGI、waitress、mod_wsgi
+python3 -m ai_gov.api                   # 只能用於開發，見下
+```
+
+`python3 -m ai_gov.api` 跑的是 `wsgiref.simple_server`，
+單執行緒、沒有 TLS。**不可以用在正式環境** ——
+所有操作者 token 都會以明文通過網路。
+它存在的目的只是讓人不必安裝任何東西就能在本機試這些端點。
+
+#### 操作者（繁體中文）
+
+CLI 可以把檔案系統存取當成授權：能跑這支程式的人本來就讀得到紀錄庫。
+HTTP 沒有這道邊界，所以每個請求都要用 bearer token 表明自己是哪個操作者：
+
+```yaml
+operators:
+  reviewer:
+    token_env: AI_GOV_TOKEN_REVIEWER
+    may_act_as: [judiciary]
+```
+
+`token_env` 填的是環境變數名稱，絕不是 token 本身 ——
+跟 provider 放金鑰的規則完全一樣。
+操作者只能代理它列出的角色，
+所以 HTTP 介面永遠不可能比角色隔離允許的範圍更寬。
+兩個操作者不能共用同一個變數：
+分辨不出來的操作者，等於白白替它們取了不同名字。
+
+```http
+Authorization: Bearer $AI_GOV_TOKEN_REVIEWER
+```
+
+每個設定過的操作者都會被比對，而且是常數時間比對；
+變數沒設定的操作者永遠比不中 ——
+沒有憑證不能當成「以缺席的 token 通過驗證」。
+被拒絕時也不會透露哪一個 token 比較接近。
 
 #### POST /laws (繁體中文)
 
-建立法律。
+建立法律。以**立法權**行動。
 
-請求欄位：
-
-- `title`
-- `acceptance_criteria`
-- `red_lines`
+```json
+{"title": "App Launch Law",
+ "acceptance_criteria": ["30 survey responses", "5 interviews"],
+ "red_lines": ["no missing privacy policy"]}
+```
 
 #### POST /cases (繁體中文)
 
-根據法律建立案件。
+在某條法律底下開案。以**立法權**行動。
 
-請求欄位：
+```json
+{"law_id": "LAW-001", "name": "Habit App MVP", "request": "Build a habit tracker"}
+```
 
-- `law_id`
-- `scope`
-- `artifacts`
+`request` 屬於 intake，不是任何角色的寫入：
+`NEW` 沒有宣告行動角色，所以原始請求在系統內部沒有作者。
+沒填的話預設用 `name`。
 
 #### POST /harnesses (繁體中文)
 
-提交 harness 證據包。
+提交證據。以**行政權**行動。
 
-請求欄位：
+```json
+{"case_id": "CASE-001",
+ "artifacts": {"test_plan": "30 responses, 5 interviews",
+               "evidence_bundle": "survey export, 31 rows"}}
+```
 
-- `case_id`
-- `test_plan`
-- `evidence_bundle`
-- `failure_mode_notes`
+回應會列出還缺哪些必要證據、哪些已交的證據沒通過機械檢查，
+以及設定檔對這兩種情況各自的判定。
+空洞的證據會被記錄而不是被拒絕 ——
+一份什麼都沒說的證據，仍然是行政權交出來的東西。
+超出行政權權限的 artifact 則回 `403`。
 
 #### POST /judgments (繁體中文)
 
-驗證案件。
+驗證案件。以**司法權**行動。
 
-請求欄位：
+```json
+{"case_id": "CASE-001", "unresolved_law_items": 0}
+```
 
-- `case_id`
-- `evidence`
-- `result`
+**沒有 `result` 欄位，送了就是 `422`。**
+判決是**請求**，不是**斷言**：
+客戶端送出判決所依據的事實，由伺服器執行狀態機，
+回應只是報告圖最後停在哪裡。
+如果呼叫方可以直接送 `result: "PASSED"`，
+這個 repo 裡所有的 guard、迴圈上限與證據要求就全都變成裝飾品。
+
+跟 CLI 一樣，必須提供判決來源：`with_models: true`，
+或 `unresolved_law_items`、`defective_law_items`、`red_line_violated` 至少其一。
+兩者皆無時，案件會靠預設值一路走到 `PASSED`。
+
+`REJECTED` 是一次**成功**的請求。
+判決在回應主體裡；用 HTTP 錯誤來表達它，
+等於把「系統拒絕回答」跟「系統回答不通過」混為一談。
 
 #### POST /law-amendments (繁體中文)
 
-提出法律修正請求。
+提出法律修正請求。以**司法權**行動。
 
-請求欄位：
+```json
+{"case_id": "CASE-001", "reason": "The law needs a crash threshold",
+ "proposed_changes": ["state a crash rate"]}
+```
 
-- `case_id`
-- `reason`
-- `proposed_changes`
+`proposed_changes` 會併進 `amendment_reason` 這份 artifact，
+而不是自成一個 key：司法權的 `may_write` 裡沒有這個 key，
+HTTP 這一層不可以靠發明一個新 key 來擴張角色權限。
 
 #### POST /law-clarifications (繁體中文)
 
-提出法律澄清請求。
+提出法律澄清請求。以**行政權**行動。
 
-請求欄位：
+```json
+{"case_id": "CASE-001", "reason": "The acceptance criteria are ambiguous"}
+```
 
-- `case_id`
-- `reason`
-- `ambiguity_notes`
+#### GET /cases/{id} (繁體中文)
+
+稽核視圖：狀態、走過的路線、harness 覆蓋率、
+各迴圈的使用次數對上限、修復次數、checkpoint 次數，以及已記錄的判決事實。
+任何通過驗證的操作者都可以讀。
+
+它**不回傳任何 artifact 的內容**。
+交出證據原文需要一次以角色為範圍的讀取，
+而這一層只知道是哪個操作者在問，不知道是哪個角色在問。
 
 ### 回應模型
 
+每個回應都帶同樣三個 key，再加上各端點自己的細節：
+
 ```json
 {
-  "id": "LAW-001",
-  "status": "passed",
-  "summary": "All criteria satisfied"
+  "id": "CASE-001",
+  "status": "PASSED",
+  "summary": "case ended at PASSED"
 }
 ```
+
+錯誤用同樣的形狀，`"status": "error"`，原因放在 `summary`。
+
+| 狀態碼 | 意義 |
+| --- | --- |
+| `200` / `201` | 請求成功；若有判決，判決在回應主體裡 |
+| `400` | 主體不是合法的 JSON |
+| `401` | 沒有 bearer token，或沒有操作者比中 |
+| `403` | 操作者不能代理該角色，或該角色不能寫這個 key |
+| `404` | 查無此法律、案件或端點 |
+| `405` | 方法錯誤；`Allow` 標頭會說明接受哪些方法 |
+| `409` | 紀錄在這次寫入之前被別人改過，寫入遭拒 |
+| `413` | 主體超過 1 MiB |
+| `422` | 主體是合法 JSON，但不是一個可用的請求 |
 
 ### 建議證據
 
