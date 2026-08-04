@@ -19,6 +19,11 @@ long_task:
     - next_step
     - eta
 
+# Artifacts the caller supplies rather than any role. NEW has no acting role,
+# so the original request has no author inside the system.
+intake_artifacts:
+  - user_request
+
 # Model replies must be machine-readable. A repair attempt is a retry, so its
 # ceiling is declared here rather than assumed in code.
 model_replies:

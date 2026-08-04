@@ -618,6 +618,70 @@ def validate_role_providers(
                 )
 
 
+def validate_evidence_is_producible(doc: dict[str, Any], errors: list[str]) -> None:
+    """Every named artifact must have somebody who can produce it.
+
+    An edge requiring evidence no role may write is an edge no case can ever
+    take: the graph checks call it reachable, and a case reaching it simply
+    stops forever. Same for a `per_iteration_artifact` nothing writes — the
+    stagnation rule then compares None to None and never fires.
+
+    The check is deliberately weak: *somebody* must be able to write it, not
+    the role acting in the source state. Evidence is often produced earlier and
+    carried forward — `JUDICIARY -> PASSED` needs `output_snapshot`, written by
+    the executive several states back — so the strict version would reject
+    correct configs.
+    """
+    role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
+    writable: set[str] = set()
+    for role_cfg in role_isolation.values():
+        if isinstance(role_cfg, dict) and isinstance(role_cfg.get("may_write"), list):
+            writable |= {str(key) for key in role_cfg["may_write"]}
+
+    intake = as_list(doc.get("intake_artifacts"), "intake_artifacts", errors)
+    intake_set = {str(name) for name in intake}
+    if not intake_set:
+        errors.append("intake_artifacts must not be empty")
+    # An intake artifact that a role can also write has two authors, which is
+    # the same ambiguity may_write disjointness exists to prevent.
+    both = sorted(intake_set & writable)
+    if both:
+        errors.append(
+            f"intake_artifacts also claimed by a role's may_write: {', '.join(both)}"
+        )
+
+    producible = writable | intake_set
+
+    edges = as_mapping((doc.get("graph") or {}).get("edges"), "graph.edges", errors)
+    for source in sorted(edges):
+        targets = edges.get(source)
+        if not isinstance(targets, dict):
+            continue
+        for target in sorted(targets):
+            edge = targets.get(target)
+            if not isinstance(edge, dict):
+                continue
+            evidence = edge.get("required_evidence")
+            if isinstance(evidence, str) and evidence and evidence not in producible:
+                errors.append(
+                    f"graph.edges.{source}.{target}.required_evidence cannot be produced "
+                    f"by any role: {evidence}"
+                )
+
+    loops = doc.get("loops")
+    if isinstance(loops, dict):
+        for name in sorted(loops):
+            loop = loops[name]
+            if not isinstance(loop, dict):
+                continue
+            artifact = loop.get("per_iteration_artifact")
+            if isinstance(artifact, str) and artifact and artifact not in producible:
+                errors.append(
+                    f"loops.{name}.per_iteration_artifact cannot be produced by any "
+                    f"role: {artifact}"
+                )
+
+
 def validate_model_replies(doc: dict[str, Any], errors: list[str]) -> None:
     replies = as_mapping(doc.get("model_replies"), "model_replies", errors)
     if not replies:
@@ -863,6 +927,7 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
     identities = validate_providers(doc, errors)
     validate_role_providers(doc, identities, errors)
     validate_model_replies(doc, errors)
+    validate_evidence_is_producible(doc, errors)
     validate_write_authority(doc, errors)
     validate_state_roles(doc, state_set, errors)
 
