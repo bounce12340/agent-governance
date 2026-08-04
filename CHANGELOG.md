@@ -46,6 +46,24 @@ All notable changes to this project will be documented here.
 - `ai-gov` CLI implementing the documented command surface, with a flat-file
   record store, verdict-bearing exit codes, and writes bound by the acting
   role's authority
+- Evidence producibility: every `required_evidence` and `per_iteration_artifact`
+  must be writable by some role or listed in the new `intake_artifacts` block,
+  so an edge nobody can supply evidence for fails validation instead of
+  stranding a case at run time
+- Run-time model overrides: `providers.<name>.model_env` names an environment
+  variable that supersedes the configured model id, and the wiring report says
+  which of the two won
+- Optimistic concurrency on the record store: cases carry a `version`, a stale
+  write is refused with exit code `5` rather than silently overwriting, and
+  records are written to a temporary file and renamed so a reader never sees
+  half a record
+- Operators: an `operators` config block binds a bearer-token environment
+  variable to the roles it may act as, compared in constant time, so a network
+  caller can never act as a role role isolation would not allow
+- HTTP API: `ai_gov/api.py` exposes the flow as a WSGI application with no
+  bundled server. `POST /judgments` accepts the facts a verdict is derived from
+  and never a `result` field — the server runs the graph and reports where it
+  ended
 - Offline runtime test suite and a third CI job that runs it without secrets
 - `CLAUDE.md` guidance for Claude Code
 
