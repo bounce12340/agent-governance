@@ -4,91 +4,176 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A documentation-first specification of a multi-agent AI governance framework
-(constitution → legislative → executive → harness gate → judiciary). There is no
-application code: the only executable is `scripts/validate_governance.py`.
+Mostly a specification-and-documentation repo for a multi-agent AI governance framework
+(separation of powers: legislative / executive / judiciary, plus a harness evidence gate).
 
-`docs/cli-api-reference.md` documents an `ai-gov` CLI and a set of HTTP endpoints —
-these are a *proposed* surface, not implemented here. Do not assume they exist or
-call them.
+Three things are executable: `scripts/validate_governance.py` (config validator), `runtime/`
+(binds roles to model interfaces and executes the state machine), and `ai_gov/` — the
+`ai-gov` CLI (`./bin/ai-gov` or `python3 -m ai_gov`) plus `ai_gov/api.py`, a WSGI
+application exposing the same flow over HTTP. Everything else is spec.
+
+`ai_gov/api.py` deliberately ships no server: `create_app()` returns a WSGI callable and
+the deployment brings its own gunicorn/uWSGI/waitress. `python3 -m ai_gov.api` runs
+`wsgiref.simple_server` for local development only — single-threaded, no TLS.
 
 ## Commands
 
 ```bash
-# Validate the governance contract (this is the repo's real test)
+# Validate the governance config (defaults to config/governance.yaml if path omitted)
 python3 scripts/validate_governance.py config/governance.yaml
-python3 scripts/validate_governance.py config/governance.json   # mirror copy, not covered by CI
-python3 scripts/validate_governance.py                          # defaults to config/governance.yaml
+python3 scripts/validate_governance.py config/governance.json
 
-# Lint all markdown (markdownlint-cli2 is not vendored; npx fetches it)
-npx -y markdownlint-cli2 "**/*.md" "!node_modules"
+# Runtime tests — offline, no credentials, no dependencies
+python3 -m unittest discover -s tests -p 'test_*.py'
+
+# A single test class or method
+python3 -m unittest tests.test_runtime.RoleIsolationTest
+python3 -m unittest tests.test_runtime.RoleIsolationTest.test_forbidden_material_is_rejected
+
+# Report which model interface is bound to which role (calls no model)
+python3 -m runtime
+
+# The CLI, straight from a checkout (no install, no dependencies)
+./bin/ai-gov --help
+./bin/ai-gov law create --title "T" --metric "M" --redline "R"
+./bin/ai-gov judge run --case CASE-001 --unresolved 0
+
+# The HTTP API. Development only — no TLS, single-threaded.
+AI_GOV_TOKEN_REVIEWER=dev-token python3 -m ai_gov.api
+curl -H "Authorization: Bearer dev-token" http://127.0.0.1:8080/cases/CASE-001
+
+# Lint markdown exactly as CI does
+npx --yes markdownlint-cli2 "**/*.md" "!node_modules"
+
+# Lint a single file
+npx --yes markdownlint-cli2 README.md
 ```
 
-Validator exit codes: `0` pass, `1` file not found, `2` parse failure, `3` validation
-errors (each error printed as its own bullet line).
+Validator exit codes: `0` pass, `1` file not found, `2` parse failure, `3` validation errors
+(each error printed as a `- <message>` line). `python3 -m runtime` exits `1` if any
+credential is missing. `ai-gov` exit codes: `0` ok/`PASSED`, `1` usage or refused write,
+`2` blocked, `3` `REJECTED`, `4` escalated, `5` write conflict — documented in
+`docs/cli-api-reference.md`.
 
-`.github/workflows/ci.yml` runs exactly these two jobs, and only on push/PR to `main`
-— feature branches get no CI, so run both locally before pushing.
+CI (`.github/workflows/ci.yml`) runs three jobs on push/PR to `main`: markdownlint over all
+`**/*.md`, the validator against both configs, and the runtime tests. The runtime job runs
+with no secrets and no network — the `stub` interface exists so it can.
 
-There is no test framework. `TESTS.md` is a manual doc-review matrix (bilingual
-coverage, role coverage), not something you can execute. The closest thing to
-"running a single test" is pointing the validator at one config file.
+`TESTS.md` is a manual review matrix (bilingual coverage, role completeness), separate from
+`tests/test_runtime.py`, `tests/test_executor.py`, `tests/test_agency.py`,
+`tests/test_cli.py`, `tests/test_supervision.py`, `tests/test_checks.py`,
+`tests/test_repair.py`, `tests/test_convergence.py`, `tests/test_evidence.py`,
+`tests/test_store.py`, `tests/test_operators.py` and `tests/test_api.py`, which are the
+automated suite. `test_api.py` opens no socket — a WSGI app is a callable, so it is
+exercised directly.
 
-## Architecture: one contract, four copies
+## Architecture: where the governance model actually lives
 
-The governance contract is duplicated across places that nothing automatically keeps
-in sync. A change to any of them usually needs the same change in the others:
+The same model is encoded in several places that must be changed together. Editing one
+alone will either break CI or silently desync the docs from the enforced contract:
 
-1. `config/governance.yaml` — source of truth; the only file CI validates.
-2. `config/governance.json` — hand-maintained mirror of the YAML. No check compares
-   the two; edit both or they silently drift.
-3. `scripts/validate_governance.py` — hardcodes the required contract as module-level
-   constants (`REQUIRED_STATES`, `REQUIRED_TRANSITIONS`, `REQUIRED_ARTIFACTS`,
-   `REQUIRED_LONG_TASK_KEYS`, `REQUIRED_PROGRESS_FIELDS`, `ROLE_NAMES`).
-4. Prose that repeats the same state names and artifact names:
-   `docs/state-machine.md`, `docs/governance-architecture.md`, `CONSTITUTION.md`,
-   `examples/*.md`, `tests/harness_examples.md`.
+1. **`config/governance.yaml`** — the machine-readable source of truth CI validates.
+2. **`config/governance.json`** — a byte-for-byte-equivalent duplicate of the YAML. Keep in sync.
+3. **`scripts/validate_governance.py`** — hardcodes the *required minimums* as module-level
+   constants: `REQUIRED_STATES`, `REQUIRED_TRANSITIONS`, `REQUIRED_ARTIFACTS`,
+   `REQUIRED_LONG_TASK_KEYS`, `REQUIRED_PROGRESS_FIELDS`, `ROLE_NAMES`,
+   `REQUIRED_LOOP_NAMES`, `REQUIRED_LOOP_KEYS`, `REQUIRED_GRAPH_INVARIANTS`,
+   `REQUIRED_EDGE_KEYS`, `REQUIRED_PROVIDER_KEYS`, `KNOWN_INTERFACES`, `KNOWN_GUARDS`,
+   `KNOWN_ARTIFACT_CHECKS`, `REQUIRED_MODEL_REPLY_KEYS`, `KNOWN_CONVERGENCE_RULES`.
+   Adding a workflow state or harness artifact to the config alone does nothing; the
+   validator only enforces what is listed here.
+4. **Prose docs** — `docs/state-machine.md` (state list + ASCII diagram),
+   `docs/governance-architecture.md` (layer descriptions), `docs/loop-engineering.md`
+   (loop contract + declared loops), `docs/graph-engineering.md` (graph invariants +
+   enumerated cycles), `docs/model-interfaces.md` (provider schema + adapter contract),
+   `docs/case-execution.md` (executor semantics), `docs/long-task-supervision.md`
+   (checkpoint contract), `CONSTITUTION.md` (non-negotiable rules). These restate the
+   config in both languages.
+5. **`runtime/`** — consumes the config at run time and hardcodes none of the flow. Four
+   registries must stay equal to validator constants, each asserted by a test so drift
+   fails CI rather than surfacing at run time: `runtime/adapters.py:INTERFACES` mirrors
+   `KNOWN_INTERFACES`, `runtime/guards.py:GUARDS` mirrors `KNOWN_GUARDS`,
+   `runtime/checks.py:CHECKS` mirrors `KNOWN_ARTIFACT_CHECKS`, and
+   `runtime/convergence.py:RULES` mirrors `KNOWN_CONVERGENCE_RULES`. Adding a `graph.edges`
+   entry therefore usually means adding a guard implementation too.
 
-Validation is **subset-based, not exact**: the config may add states, transitions, and
-harness artifacts, but may never drop a required one. Several values are pinned to an
-exact literal and will fail CI if merely relaxed — `version == 1`,
-`require_harness_before_judgment == true`, `escalation_on_miss == LAW_CLARIFICATION_REQUEST`,
-`gate_behavior.missing_artifacts == INCOMPLETE`, `gate_behavior.invalid_artifacts == REWORK`,
-`role_isolation.<role>.model == "separate"`. Loosening the config alone is always a CI
-failure; the validator constants have to move first.
+**Changing the state machine touches all of these at once.** Adding a transition can create
+a new cycle, and an undeclared cycle is a hard validation error — so a new transition
+usually also needs a `loops` entry, a `graph.edges` entry with `guard` and
+`required_evidence`, and the cycle list in `docs/graph-engineering.md` updated.
 
-## The vendored YAML parser constrains config syntax
+### What the validator enforces
 
-`validate_governance.py` contains `StrictYAMLParser`, used whenever PyYAML is not
-importable — which is the case in CI (`setup-python` with no install step). It parses a
-deliberate subset: nested mappings, dash-prefixed block lists, inline `[a, b]` lists, integers,
-`true`/`false`, `null`/`~`, single/double-quoted strings, and `#` comments. Anything
-outside that (anchors, folded/multi-line scalars, inline `{}` maps, inconsistent
-indentation) either raises `YamlParseError` → exit 2, or is silently kept as a bare
-string. Keep `config/governance.yaml` inside the subset; if you need richer YAML,
-extend the parser in the same commit.
+It is a superset check plus literal-value assertions, not a schema validator. The config may
+add states/transitions/artifacts, but must contain the required ones, and these exact values
+are asserted: `constitution.require_harness_before_judgment: true`,
+`allow_judiciary_law_amendment_request: true`, `allow_executive_clarification_request: true`,
+`max_rework_count` a positive int, `long_task.enabled: true`,
+`long_task.escalation_on_miss: LAW_CLARIFICATION_REQUEST`,
+`harness.gate_behavior.missing_artifacts: INCOMPLETE`,
+`harness.gate_behavior.invalid_artifacts: REWORK`, and every role in `role_isolation` having
+`model: separate` with non-empty `may_read` / `may_not_read`.
 
-Note the asymmetry: locally PyYAML may be present, so a config that parses on your
-machine can still fail in CI. Test parsing the way CI does before pushing.
+It also derives facts from the graph rather than trusting the config: it enumerates every
+simple cycle in `workflow.transitions` and fails on any cycle not declared in `loops`,
+checks reachability from `NEW` and reverse reachability to a terminal state, requires
+`graph.edges` to mirror `workflow.transitions` exactly in both directions, and cross-checks
+`loops.rework_loop.max_iterations` against `constitution.max_rework_count` and
+`loops.checkpoint_loop.max_iterations` against `long_task.max_missed_checkpoints`, and
+`loops.checkpoint_loop.escalation_target` against `long_task.escalation_on_miss`.
 
-## Docs conventions
+For providers it enforces that `api_key_env` and `model_env` look like environment variable
+names rather than literal values (`model_env` may also be `null`, meaning the provider
+declines run-time model overrides), that non-`stub` interfaces carry an `http(s)://`
+`base_url`, and that no
+two roles resolve to the same `(interface, base_url, model)` triple — that last one is what
+turns `model: separate` from a claim into a constraint, so **at least two distinct model
+configurations are required** for any valid config.
 
-- **Bilingual is mandatory.** Every doc carries an English section and a 繁體中文
-  section with matching structure (`CONTRIBUTING.md` and `TESTS.md` both treat this as
-  an acceptance criterion). Adding an English-only section is a regression.
-- **MD013 (line length) is disabled** in `.markdownlint.json`; every other markdownlint
-  default is on. MD024 (`no-duplicate-heading`) applies across the whole file, not just
-  siblings — that is why headings are disambiguated as
-  `### Example 1 English` / `#### App idea validation, legislative spec` rather than
-  repeating `### English`. Follow that pattern in new docs with parallel sections.
-- **New docs need two links.** `README.md` ("Repo docs") and `docs/README_INDEX.md`
-  maintain overlapping indexes; add the entry to both.
-- Artifact IDs follow `LAW-XXXX`, `CASE-XXXX`, `JUDGMENT-XXXX`, `CHECKPOINT-XXXX`.
+It also enforces that `role_isolation.<role>.may_write` sets are disjoint across roles,
+that `state_roles` covers every state with either a declared role or an explicit `null`
+(terminal states must be `null`), and that every required harness artifact declares at
+least one implemented entry in `harness.artifact_checks`, and that
+`model_replies.max_repair_attempts` is a non-negative integer no greater than
+`MAX_REPAIR_CEILING` — a repair round trip is a retry, and this repo does not allow
+unbounded ones.
 
-## Constraints on content changes
+Two more checks close gaps the graph invariants leave open. **Evidence must be
+producible**: every `required_evidence` and every `per_iteration_artifact` must appear in
+some role's `may_write` or in `intake_artifacts`, because an edge demanding evidence nobody
+can write is reachable on paper and impassable in practice. `intake_artifacts` exists for
+`user_request`, which has no author inside the system (`NEW` declares no acting role), and
+an artifact may be intake or role-written, never both. **Operators must be resolvable**:
+each `operators.<name>` declares a `token_env` variable name (never a token), a
+`may_act_as` list of declared roles only, and no two operators may share one variable.
 
-`CONSTITUTION.md` is the repo's own subject matter, and `CONTRIBUTING.md` asks that the
-separation-of-powers model stay intact. When editing docs, config, or examples, preserve:
-role isolation between legislative/executive/judiciary, the harness gate as a hard
-precondition for judgment, a capped rework count, and the reverse feedback paths
-(judiciary → legislative amendment, executive → legislative clarification).
+These mirror the constitution's structural rules — harness before judgment, capped rework,
+role isolation, two-way feedback channels. Loosening one in the config without changing
+`CONSTITUTION.md` puts the two out of agreement.
+
+### The vendored YAML parser
+
+`validate_governance.py` ships `StrictYAMLParser`, a hand-written parser for the small YAML
+subset this repo uses, so the script runs with zero third-party dependencies. It imports
+PyYAML only if already present and falls back to the local parser otherwise. Keep
+`config/governance.yaml` inside that subset: plain `key: value` mappings, hyphen-prefixed
+block list items,
+inline `[a, b]` lists, quoted strings, ints, `true`/`false`, `null`/`~`, and `#` comments.
+Anchors, multi-line scalars, nested inline maps, and inconsistent indentation raise
+`YamlParseError` (exit code 2).
+
+## Documentation conventions
+
+- **Every document is bilingual**: an English section and a 繁體中文 section, with matching
+  structure. New docs and new sections in existing docs must carry both.
+- **markdownlint runs with only `MD013` (line length) disabled** (`.markdownlint.json`).
+  `MD024` (duplicate headings) is therefore active, which bites constantly in a bilingual
+  repo where the same heading naturally recurs. Existing docs disambiguate by suffixing the
+  heading — `### Example 1 English` / `### Example 1 繁體中文`,
+  `#### POST /laws (English)` / `#### POST /laws (繁體中文)`,
+  `#### App idea validation, legislative spec`, `### Added (1.0.0)`. Follow that pattern
+  rather than repeating a bare heading.
+- Adding a doc under `docs/` means adding it to **both** link indexes:
+  `docs/README_INDEX.md` and the "Repo docs / 文件索引" section of `README.md`.
+- House style (from `CONTRIBUTING.md`): keep the separation-of-powers model intact, keep
+  acceptance criteria testable, keep examples short and concrete, avoid marketing-only text.

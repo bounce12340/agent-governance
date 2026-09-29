@@ -60,6 +60,112 @@ REQUIRED_PROGRESS_FIELDS = {"completed", "blocked", "next_step", "eta"}
 
 ROLE_NAMES = {"legislative", "executive", "judiciary"}
 
+REQUIRED_LOOP_NAMES = {
+    "rework_loop",
+    "clarification_loop",
+    "amendment_loop",
+    "checkpoint_loop",
+}
+
+REQUIRED_LOOP_KEYS = {
+    "scope",
+    "paths",
+    "entry_condition",
+    "convergence_metric",
+    "convergence_rule",
+    "exit_condition",
+    "max_iterations",
+    "per_iteration_artifact",
+    "stagnation_rule",
+    "escalation_target",
+}
+
+LOOP_TEXT_KEYS = (
+    "entry_condition",
+    "convergence_metric",
+    "exit_condition",
+    "per_iteration_artifact",
+    "stagnation_rule",
+)
+
+LOOP_SCOPES = {"graph", "supervision"}
+
+# Convergence rules the executor can apply. Keep in sync with
+# runtime/convergence.py:RULES. A loop declaring a metric nothing compares is
+# a loop whose convergence is decorative.
+KNOWN_CONVERGENCE_RULES = {
+    "must_not_increase",
+    "must_strictly_decrease",
+    "supervised_elsewhere",
+}
+
+REQUIRED_TERMINAL_STATES = {"PASSED", "REJECTED"}
+
+REQUIRED_GRAPH_INVARIANTS = {
+    "require_all_states_reachable",
+    "require_terminal_reachable_from_all",
+    "require_terminal_states_are_sinks",
+    "require_every_cycle_declared",
+    "require_edge_guards",
+}
+
+REQUIRED_EDGE_KEYS = {"guard", "required_evidence"}
+
+REQUIRED_PROVIDER_KEYS = {
+    "interface",
+    "base_url",
+    "model",
+    "model_env",
+    "api_key_env",
+    "timeout_seconds",
+    "max_output_tokens",
+}
+
+# Interfaces the runtime knows how to speak. Keep in sync with
+# runtime/adapters.py:INTERFACES.
+KNOWN_INTERFACES = {"openai_chat_completions", "anthropic_messages", "stub"}
+
+# The stub interface performs no network I/O, so it carries no endpoint and no
+# credential. Every other interface must carry both.
+OFFLINE_INTERFACES = {"stub"}
+
+# Guards the executor can evaluate. Keep in sync with runtime/guards.py:GUARDS.
+# A guard named in graph.edges with no implementation is an edge nothing can
+# ever take, which the graph checks alone would not notice.
+KNOWN_GUARDS = {
+    "request_received",
+    "law_published",
+    "law_ambiguous",
+    "all_required_artifacts_present",
+    "harness_gate_satisfied",
+    "red_line_violated",
+    "law_defective",
+    "law_items_unproven",
+    "all_law_items_proven",
+    "rework_budget_remaining",
+    "rework_budget_exhausted",
+    "amendment_accepted",
+    "clarification_needs_law_change",
+    "clarification_resolved_in_place",
+}
+
+# Artifact checks the harness gate can run. Keep in sync with
+# runtime/checks.py:CHECKS.
+KNOWN_ARTIFACT_CHECKS = {"non_empty", "not_placeholder", "contains_a_number"}
+
+REQUIRED_MODEL_REPLY_KEYS = {
+    "require_json",
+    "max_repair_attempts",
+    "repair_instruction",
+}
+
+# A repair round trip is a retry. Capping it in the config rather than in code
+# keeps the framework's own rule — no unbounded retries — true of the layer
+# that talks to models.
+MAX_REPAIR_CEILING = 3
+
+ENTRY_STATE = "NEW"
+
 
 class YamlParseError(ValueError):
     pass
@@ -215,6 +321,493 @@ def as_list(value: Any, label: str, errors: list[str]) -> list[Any]:
     return value
 
 
+def normalize_cycle(states: list[str]) -> tuple[str, ...]:
+    """Rotate a cycle so it starts at its lexicographically smallest state."""
+    if not states:
+        return ()
+    offset = states.index(min(states))
+    return tuple(states[offset:] + states[:offset])
+
+
+def reachable_from(start: str, edges: dict[str, list[str]]) -> set[str]:
+    seen = {start}
+    stack = [start]
+    while stack:
+        node = stack.pop()
+        for target in edges.get(node, []):
+            if target not in seen:
+                seen.add(target)
+                stack.append(target)
+    return seen
+
+
+def reverse_edges(edges: dict[str, list[str]]) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for source, targets in edges.items():
+        for target in targets:
+            result.setdefault(target, []).append(source)
+    return result
+
+
+def find_simple_cycles(edges: dict[str, list[str]]) -> set[tuple[str, ...]]:
+    """Enumerate every simple cycle, each rotated to a canonical start state.
+
+    Each cycle is only discovered from its smallest member, so the recorded
+    path is already in normalized form.
+    """
+    nodes = set(edges)
+    for targets in edges.values():
+        nodes.update(targets)
+    cycles: set[tuple[str, ...]] = set()
+
+    def walk(start: str, node: str, path: list[str], seen: set[str]) -> None:
+        for target in edges.get(node, []):
+            if target == start:
+                cycles.add(tuple(path))
+            elif target not in seen and target > start:
+                walk(start, target, path + [target], seen | {target})
+
+    for start in sorted(nodes):
+        walk(start, start, [start], {start})
+    return cycles
+
+
+def validate_loops(
+    doc: dict[str, Any],
+    state_set: set[str],
+    transition_map: dict[str, list[str]],
+    errors: list[str],
+) -> set[tuple[str, ...]]:
+    """Check loop declarations and return the cycles they cover."""
+    declared_cycles: set[tuple[str, ...]] = set()
+    loops = as_mapping(doc.get("loops"), "loops", errors)
+    if not loops:
+        return declared_cycles
+
+    missing_loops = sorted(REQUIRED_LOOP_NAMES - set(loops.keys()))
+    if missing_loops:
+        errors.append(f"loops missing: {', '.join(missing_loops)}")
+
+    for name in sorted(set(loops.keys()) & REQUIRED_LOOP_NAMES):
+        loop = as_mapping(loops.get(name), f"loops.{name}", errors)
+        if not loop:
+            continue
+        missing_keys = sorted(REQUIRED_LOOP_KEYS - set(loop.keys()))
+        if missing_keys:
+            errors.append(f"loops.{name} missing keys: {', '.join(missing_keys)}")
+
+        max_iterations = loop.get("max_iterations")
+        if not isinstance(max_iterations, int) or max_iterations < 1:
+            errors.append(f"loops.{name}.max_iterations must be a positive integer")
+        for key in LOOP_TEXT_KEYS:
+            value = loop.get(key)
+            if not isinstance(value, str) or not value:
+                errors.append(f"loops.{name}.{key} must be a non-empty string")
+        if loop.get("escalation_target") not in state_set:
+            errors.append(f"loops.{name}.escalation_target must be a declared state")
+        if loop.get("convergence_rule") not in KNOWN_CONVERGENCE_RULES:
+            errors.append(
+                f"loops.{name}.convergence_rule must be one of: "
+                + ", ".join(sorted(KNOWN_CONVERGENCE_RULES))
+            )
+
+        scope = loop.get("scope")
+        if scope not in LOOP_SCOPES:
+            errors.append(f"loops.{name}.scope must be 'graph' or 'supervision'")
+        paths = as_list(loop.get("paths"), f"loops.{name}.paths", errors)
+        if scope == "supervision":
+            if paths:
+                errors.append(f"loops.{name} has supervision scope and must declare no paths")
+            continue
+        if not paths:
+            errors.append(f"loops.{name}.paths must not be empty")
+
+        for position, path in enumerate(paths):
+            label = f"loops.{name}.paths[{position}]"
+            if not isinstance(path, list) or not path:
+                errors.append(f"{label} must be a non-empty list")
+                continue
+            steps = [str(item) for item in path]
+            if len(set(steps)) != len(steps):
+                errors.append(f"{label} must not repeat a state")
+                continue
+            unknown = sorted(set(steps) - state_set)
+            if unknown:
+                errors.append(f"{label} has unknown states: {', '.join(unknown)}")
+                continue
+            closed = True
+            for index, source in enumerate(steps):
+                target = steps[(index + 1) % len(steps)]
+                if target not in transition_map.get(source, []):
+                    errors.append(f"{label} uses an undeclared transition: {source} -> {target}")
+                    closed = False
+            if closed:
+                declared_cycles.add(normalize_cycle(steps))
+
+    return declared_cycles
+
+
+def validate_graph(
+    doc: dict[str, Any],
+    state_set: set[str],
+    transition_map: dict[str, list[str]],
+    declared_cycles: set[tuple[str, ...]],
+    errors: list[str],
+) -> None:
+    graph = as_mapping(doc.get("graph"), "graph", errors)
+    if not graph:
+        return
+
+    terminal_states = as_list(graph.get("terminal_states"), "graph.terminal_states", errors)
+    terminal_set = {str(item) for item in terminal_states}
+    missing_terminals = sorted(REQUIRED_TERMINAL_STATES - terminal_set)
+    if missing_terminals:
+        errors.append(f"graph.terminal_states missing: {', '.join(missing_terminals)}")
+
+    invariants = as_mapping(graph.get("invariants"), "graph.invariants", errors)
+    for invariant in sorted(REQUIRED_GRAPH_INVARIANTS):
+        if invariants.get(invariant) is not True:
+            errors.append(f"graph.invariants.{invariant} must be true")
+
+    edges = as_mapping(graph.get("edges"), "graph.edges", errors)
+    declared_edges: set[tuple[str, str]] = set()
+    for source in sorted(edges):
+        targets = as_mapping(edges.get(source), f"graph.edges.{source}", errors)
+        for target in sorted(targets):
+            declared_edges.add((source, target))
+            edge = as_mapping(targets.get(target), f"graph.edges.{source}.{target}", errors)
+            if not edge:
+                continue
+            for key in sorted(REQUIRED_EDGE_KEYS):
+                value = edge.get(key)
+                if not isinstance(value, str) or not value:
+                    errors.append(
+                        f"graph.edges.{source}.{target}.{key} must be a non-empty string"
+                    )
+            if isinstance(edge.get("guard"), str) and edge["guard"] not in KNOWN_GUARDS:
+                errors.append(
+                    f"graph.edges.{source}.{target}.guard has no implementation: {edge['guard']}"
+                )
+
+    workflow_edges = {
+        (source, target)
+        for source, targets in transition_map.items()
+        for target in targets
+    }
+    for source, target in sorted(workflow_edges - declared_edges):
+        errors.append(f"graph.edges missing: {source} -> {target}")
+    for source, target in sorted(declared_edges - workflow_edges):
+        errors.append(f"graph.edges declares an undeclared transition: {source} -> {target}")
+
+    for state in sorted(terminal_set):
+        if transition_map.get(state):
+            errors.append(f"graph terminal state must be a sink: {state}")
+
+    if not state_set or not transition_map:
+        return
+
+    unreachable = sorted(state_set - reachable_from(ENTRY_STATE, transition_map))
+    if unreachable:
+        errors.append(f"states unreachable from {ENTRY_STATE}: {', '.join(unreachable)}")
+
+    backwards = reverse_edges(transition_map)
+    can_finish: set[str] = set()
+    for terminal in sorted(terminal_set):
+        can_finish |= reachable_from(terminal, backwards)
+    stuck = sorted(state_set - can_finish)
+    if stuck:
+        errors.append(f"states with no path to a terminal state: {', '.join(stuck)}")
+
+    for cycle in sorted(find_simple_cycles(transition_map) - declared_cycles):
+        route = " -> ".join(cycle + (cycle[0],))
+        errors.append(f"undeclared cycle in workflow graph: {route}")
+
+
+def validate_providers(doc: dict[str, Any], errors: list[str]) -> dict[str, tuple[str, str, str]]:
+    """Check provider declarations and return each one's identity triple.
+
+    The triple is what makes two providers genuinely different endpoints
+    rather than two names pointing at the same model.
+    """
+    identities: dict[str, tuple[str, str, str]] = {}
+    providers = as_mapping(doc.get("providers"), "providers", errors)
+    if not providers:
+        return identities
+
+    for name in sorted(providers):
+        label = f"providers.{name}"
+        provider = as_mapping(providers.get(name), label, errors)
+        if not provider:
+            continue
+        missing_keys = sorted(REQUIRED_PROVIDER_KEYS - set(provider.keys()))
+        if missing_keys:
+            errors.append(f"{label} missing keys: {', '.join(missing_keys)}")
+
+        interface = provider.get("interface")
+        if interface not in KNOWN_INTERFACES:
+            errors.append(
+                f"{label}.interface must be one of: {', '.join(sorted(KNOWN_INTERFACES))}"
+            )
+        model = provider.get("model")
+        if not isinstance(model, str) or not model:
+            errors.append(f"{label}.model must be a non-empty string")
+        for key in ("timeout_seconds", "max_output_tokens"):
+            value = provider.get(key)
+            if not isinstance(value, int) or value < 1:
+                errors.append(f"{label}.{key} must be a positive integer")
+
+        # A model id is a default, not a fact: vendors rename and retire them.
+        # Naming an override variable is allowed; naming a model id there is not.
+        model_env = provider.get("model_env")
+        if model_env is not None and (
+            not isinstance(model_env, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]*", model_env)
+        ):
+            errors.append(f"{label}.model_env must be an environment variable name or null")
+
+        base_url = provider.get("base_url")
+        api_key_env = provider.get("api_key_env")
+        if interface in OFFLINE_INTERFACES:
+            if base_url is not None:
+                errors.append(f"{label}.base_url must be null for the {interface} interface")
+            if api_key_env is not None:
+                errors.append(f"{label}.api_key_env must be null for the {interface} interface")
+        else:
+            if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
+                errors.append(f"{label}.base_url must be an http:// or https:// URL")
+            if not isinstance(api_key_env, str) or not api_key_env:
+                errors.append(f"{label}.api_key_env must name an environment variable")
+            # A literal credential in the config would be a constitution
+            # violation, so reject anything that does not look like a var name.
+            elif not re.fullmatch(r"[A-Z][A-Z0-9_]*", api_key_env):
+                errors.append(
+                    f"{label}.api_key_env must be an environment variable name, not a key value"
+                )
+
+        identities[name] = (str(interface), str(base_url), str(model))
+
+    return identities
+
+
+def validate_role_providers(
+    doc: dict[str, Any],
+    identities: dict[str, tuple[str, str, str]],
+    errors: list[str],
+) -> None:
+    """Every role must name a declared provider, and no two may share a model.
+
+    role_isolation already asserts `model: separate` for all three roles. This
+    is what makes that claim real instead of decorative: a judiciary running the
+    same model as the legislative role is not isolated, it is the same reasoning
+    reviewing itself.
+    """
+    role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
+    if not role_isolation:
+        return
+
+    bound: dict[str, tuple[str, str, str]] = {}
+    for role in sorted(ROLE_NAMES):
+        role_cfg = as_mapping(role_isolation.get(role), f"role_isolation.{role}", errors)
+        if not role_cfg:
+            continue
+        provider = role_cfg.get("provider")
+        if not isinstance(provider, str) or not provider:
+            errors.append(f"role_isolation.{role}.provider must be a non-empty string")
+            continue
+        if provider not in identities:
+            errors.append(f"role_isolation.{role}.provider is not a declared provider: {provider}")
+            continue
+        bound[role] = identities[provider]
+
+    for role in sorted(bound):
+        for other in sorted(bound):
+            if role < other and bound[role] == bound[other]:
+                errors.append(
+                    f"role_isolation.{role} and role_isolation.{other} resolve to the "
+                    "same interface, base_url and model, so they are not isolated"
+                )
+
+
+def validate_evidence_is_producible(doc: dict[str, Any], errors: list[str]) -> None:
+    """Every named artifact must have somebody who can produce it.
+
+    An edge requiring evidence no role may write is an edge no case can ever
+    take: the graph checks call it reachable, and a case reaching it simply
+    stops forever. Same for a `per_iteration_artifact` nothing writes — the
+    stagnation rule then compares None to None and never fires.
+
+    The check is deliberately weak: *somebody* must be able to write it, not
+    the role acting in the source state. Evidence is often produced earlier and
+    carried forward — `JUDICIARY -> PASSED` needs `output_snapshot`, written by
+    the executive several states back — so the strict version would reject
+    correct configs.
+    """
+    role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
+    writable: set[str] = set()
+    for role_cfg in role_isolation.values():
+        if isinstance(role_cfg, dict) and isinstance(role_cfg.get("may_write"), list):
+            writable |= {str(key) for key in role_cfg["may_write"]}
+
+    intake = as_list(doc.get("intake_artifacts"), "intake_artifacts", errors)
+    intake_set = {str(name) for name in intake}
+    if not intake_set:
+        errors.append("intake_artifacts must not be empty")
+    # An intake artifact that a role can also write has two authors, which is
+    # the same ambiguity may_write disjointness exists to prevent.
+    both = sorted(intake_set & writable)
+    if both:
+        errors.append(
+            f"intake_artifacts also claimed by a role's may_write: {', '.join(both)}"
+        )
+
+    producible = writable | intake_set
+
+    edges = as_mapping((doc.get("graph") or {}).get("edges"), "graph.edges", errors)
+    for source in sorted(edges):
+        targets = edges.get(source)
+        if not isinstance(targets, dict):
+            continue
+        for target in sorted(targets):
+            edge = targets.get(target)
+            if not isinstance(edge, dict):
+                continue
+            evidence = edge.get("required_evidence")
+            if isinstance(evidence, str) and evidence and evidence not in producible:
+                errors.append(
+                    f"graph.edges.{source}.{target}.required_evidence cannot be produced "
+                    f"by any role: {evidence}"
+                )
+
+    loops = doc.get("loops")
+    if isinstance(loops, dict):
+        for name in sorted(loops):
+            loop = loops[name]
+            if not isinstance(loop, dict):
+                continue
+            artifact = loop.get("per_iteration_artifact")
+            if isinstance(artifact, str) and artifact and artifact not in producible:
+                errors.append(
+                    f"loops.{name}.per_iteration_artifact cannot be produced by any "
+                    f"role: {artifact}"
+                )
+
+
+def validate_operators(doc: dict[str, Any], errors: list[str]) -> None:
+    """Operators may only act as roles that exist, and never share a token.
+
+    An operator listing a role the framework does not have is an authorisation
+    rule that can never be satisfied; two operators sharing one token variable
+    are indistinguishable, which defeats the point of naming them separately.
+    """
+    operators = as_mapping(doc.get("operators"), "operators", errors)
+    if not operators:
+        errors.append("operators must declare at least one operator")
+        return
+
+    seen_tokens: dict[str, str] = {}
+    for name in sorted(operators):
+        label = f"operators.{name}"
+        operator = as_mapping(operators.get(name), label, errors)
+        if not operator:
+            continue
+
+        token_env = operator.get("token_env")
+        if not isinstance(token_env, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]*", token_env):
+            errors.append(f"{label}.token_env must be an environment variable name")
+        elif token_env in seen_tokens:
+            errors.append(
+                f"{label}.token_env is already used by operators.{seen_tokens[token_env]}"
+            )
+        else:
+            seen_tokens[token_env] = name
+
+        roles = as_list(operator.get("may_act_as"), f"{label}.may_act_as", errors)
+        if not roles:
+            errors.append(f"{label}.may_act_as must not be empty")
+        unknown = sorted({str(role) for role in roles} - ROLE_NAMES)
+        if unknown:
+            errors.append(f"{label}.may_act_as has undeclared roles: {', '.join(unknown)}")
+
+
+def validate_model_replies(doc: dict[str, Any], errors: list[str]) -> None:
+    replies = as_mapping(doc.get("model_replies"), "model_replies", errors)
+    if not replies:
+        return
+
+    missing = sorted(REQUIRED_MODEL_REPLY_KEYS - set(replies.keys()))
+    if missing:
+        errors.append(f"model_replies missing keys: {', '.join(missing)}")
+
+    if replies.get("require_json") is not True:
+        errors.append("model_replies.require_json must be true")
+
+    attempts = replies.get("max_repair_attempts")
+    if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
+        errors.append("model_replies.max_repair_attempts must be a non-negative integer")
+    elif attempts > MAX_REPAIR_CEILING:
+        errors.append(
+            f"model_replies.max_repair_attempts must be at most {MAX_REPAIR_CEILING}"
+        )
+
+    instruction = replies.get("repair_instruction")
+    if not isinstance(instruction, str) or not instruction:
+        errors.append("model_replies.repair_instruction must be a non-empty string")
+
+
+def validate_write_authority(doc: dict[str, Any], errors: list[str]) -> None:
+    """No two roles may write the same key.
+
+    Shared write authority is shared authorship. If both the legislative and
+    the judiciary role could set `red_line_violated`, the verdict would have
+    two authors and the audit trail would not say which one decided.
+    """
+    role_isolation = as_mapping(doc.get("role_isolation"), "role_isolation", errors)
+    if not role_isolation:
+        return
+
+    owner: dict[str, str] = {}
+    for role in sorted(ROLE_NAMES):
+        role_cfg = role_isolation.get(role)
+        if not isinstance(role_cfg, dict):
+            continue
+        may_write = role_cfg.get("may_write")
+        if not isinstance(may_write, list):
+            continue
+        for key in may_write:
+            name = str(key)
+            if name in owner:
+                errors.append(
+                    f"role_isolation.{role}.may_write claims '{name}', already owned by "
+                    f"{owner[name]}"
+                )
+                continue
+            owner[name] = role
+
+
+def validate_state_roles(doc: dict[str, Any], state_set: set[str], errors: list[str]) -> None:
+    """Every state declares which role acts in it, or explicitly declares none."""
+    state_roles = doc.get("state_roles")
+    if not isinstance(state_roles, dict):
+        errors.append("state_roles must be a mapping")
+        return
+
+    terminal_states = set((doc.get("graph") or {}).get("terminal_states") or [])
+    missing = sorted(state_set - set(state_roles.keys()))
+    if missing:
+        errors.append(f"state_roles missing states: {', '.join(missing)}")
+    unknown = sorted(set(state_roles.keys()) - state_set)
+    if unknown:
+        errors.append(f"state_roles has undeclared states: {', '.join(unknown)}")
+
+    for state in sorted(set(state_roles.keys()) & state_set):
+        role = state_roles[state]
+        if role is None:
+            continue
+        if role not in ROLE_NAMES:
+            errors.append(f"state_roles.{state} is not a declared role: {role}")
+        elif state in terminal_states:
+            errors.append(f"state_roles.{state} is terminal and must have no acting role")
+
+
 def validate_config(doc: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
@@ -297,16 +890,27 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
         may_not_read = as_list(
             role_cfg.get("may_not_read"), f"role_isolation.{role}.may_not_read", errors
         )
+        may_write = as_list(
+            role_cfg.get("may_write"), f"role_isolation.{role}.may_write", errors
+        )
         if not may_read:
             errors.append(f"role_isolation.{role}.may_read must not be empty")
         if not may_not_read:
             errors.append(f"role_isolation.{role}.may_not_read must not be empty")
+        if not may_write:
+            errors.append(f"role_isolation.{role}.may_write must not be empty")
+
+    state_set: set[str] = set()
+    transition_map: dict[str, list[str]] = {}
 
     workflow = as_mapping(doc.get("workflow"), "workflow", errors)
     if workflow:
         states = as_list(workflow.get("states"), "workflow.states", errors)
         transitions = as_mapping(workflow.get("transitions"), "workflow.transitions", errors)
         state_set = {str(item) for item in states}
+        for source, targets in transitions.items():
+            if isinstance(targets, list):
+                transition_map[str(source)] = [str(target) for target in targets]
         missing_states = sorted(REQUIRED_STATES - state_set)
         if missing_states:
             errors.append(f"workflow.states missing: {', '.join(missing_states)}")
@@ -342,6 +946,70 @@ def validate_config(doc: dict[str, Any]) -> list[str]:
                 errors.append("harness.gate_behavior.missing_artifacts must be INCOMPLETE")
             if gate_behavior.get("invalid_artifacts") != "REWORK":
                 errors.append("harness.gate_behavior.invalid_artifacts must be REWORK")
+
+        # An artifact with no checks is one the gate cannot tell apart from an
+        # empty string, which is what gate_behavior.invalid_artifacts is for.
+        artifact_checks = as_mapping(
+            harness.get("artifact_checks"), "harness.artifact_checks", errors
+        )
+        uncovered = sorted(artifact_set - set(artifact_checks.keys()))
+        if uncovered:
+            errors.append(
+                f"harness.artifact_checks missing entries for: {', '.join(uncovered)}"
+            )
+        for name in sorted(artifact_checks):
+            checks = as_list(
+                artifact_checks.get(name), f"harness.artifact_checks.{name}", errors
+            )
+            if not checks:
+                errors.append(f"harness.artifact_checks.{name} must not be empty")
+            unknown = sorted({str(item) for item in checks} - KNOWN_ARTIFACT_CHECKS)
+            if unknown:
+                errors.append(
+                    f"harness.artifact_checks.{name} has no implementation for: "
+                    f"{', '.join(unknown)}"
+                )
+
+    identities = validate_providers(doc, errors)
+    validate_role_providers(doc, identities, errors)
+    validate_model_replies(doc, errors)
+    validate_operators(doc, errors)
+    validate_evidence_is_producible(doc, errors)
+    validate_write_authority(doc, errors)
+    validate_state_roles(doc, state_set, errors)
+
+    declared_cycles = validate_loops(doc, state_set, transition_map, errors)
+    validate_graph(doc, state_set, transition_map, declared_cycles, errors)
+
+    # A loop bound that disagrees with the layer it governs is worse than no
+    # bound at all, because both numbers look authoritative.
+    loops = doc.get("loops")
+    if isinstance(loops, dict):
+        rework_loop = loops.get("rework_loop")
+        if isinstance(rework_loop, dict):
+            if rework_loop.get("max_iterations") != constitution.get("max_rework_count"):
+                errors.append(
+                    "loops.rework_loop.max_iterations must equal "
+                    "constitution.max_rework_count"
+                )
+        checkpoint_loop = loops.get("checkpoint_loop")
+        if isinstance(checkpoint_loop, dict):
+            if checkpoint_loop.get("max_iterations") != long_task.get("max_missed_checkpoints"):
+                errors.append(
+                    "loops.checkpoint_loop.max_iterations must equal "
+                    "long_task.max_missed_checkpoints"
+                )
+            if checkpoint_loop.get("escalation_target") != long_task.get("escalation_on_miss"):
+                errors.append(
+                    "loops.checkpoint_loop.escalation_target must equal "
+                    "long_task.escalation_on_miss"
+                )
+
+    # A supervision escalation still has to be somewhere the graph can go.
+    if long_task and state_set:
+        target = long_task.get("escalation_on_miss")
+        if target not in state_set:
+            errors.append("long_task.escalation_on_miss must be a declared state")
 
     return errors
 
